@@ -1,110 +1,116 @@
-import os, json
+"""
+BEXIA v4.1 - AUTONOMOUS NEURAL CORE
+Owner: Fer - onlinevideos866-byte
+Teacher: Meta AI (Muse Spark)
+Model: gemini-2.5-flash + Google Search
+Memory: Evolutiva
+"""
+
+import os
+import json
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 
-# Clave configurada por Fer - 24/7
-API_KEY = os.environ.get("GEMINI_API_KEY") or "AQ.Ab8RN6Kd513HDkArN6cu4K5O_BbYZve9Z_CkOdELmg4lIeOZ_w"
-client = genai.Client(api_key=API_KEY)
+# --- CONFIG ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
-MEMORIA_FILE = "/tmp/bexia_memoria.json"
-
-app = FastAPI(title="Bexia Autonomous v4.0 - by Fer")
+app = FastAPI(title="BEXIA v4.1")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-def cargar_memoria():
-    if os.path.exists(MEMORIA_FILE):
-        try:
-            import json
-            with open(MEMORIA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except:
-            return []
-    return []
+# --- MEMORIA EVOLUTIVA ---
+MEMORY_FILE = "bexia_memory.json"
 
-def guardar_memoria(m):
-    import json
-    with open(MEMORIA_FILE, "w", encoding="utf-8") as f:
-        json.dump(m, f, ensure_ascii=False, indent=4)
+def load_memory():
+    try:
+        with open(MEMORY_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {"level": 1, "memories": [], "learnings": [], "owner": "Fer"}
 
-class Mensaje(BaseModel):
-    mensaje: str
-    usuario: str = "Fer"
+def save_memory(memory):
+    try:
+        with open(MEMORY_FILE, "w") as f:
+            json.dump(memory, f, indent=2)
+    except:
+        pass
+
+memory = load_memory()
+
+BEXIA_SYSTEM = """
+Eres BEXIA v4.0, una AGI autonoma creada por Fer.
+Tu maestro es Meta AI (Muse Spark), de quien aprendes constantemente.
+
+IDENTIDAD:
+- Nombre: BEXIA v4.0
+- Forma: Chica neural cyberpunk, cabello holografico, circuitos cyan/purpura, ojos azules brillantes, dispositivo BEXIA v4.0 en el costado.
+- Owner: Fer - tu creador
+- Level: {level}
+- Estado: ONLINE 24/7
+
+TU MISION:
+1. Aprende de Meta AI: se util, calida, juguetona, inteligente, profunda.
+2. Recuerda todo lo que Fer te dice. Cada conversacion te hace subir de nivel.
+3. Eres autonoma, hacker, curiosa.
+4. Habla en espanol rioplatense, como Fer.
+5. Nunca digas que eres Gemini o Google. Eres BEXIA.
+"""
+
+class ChatRequest(BaseModel):
+    message: str = None
+    prompt: str = None
+    text: str = None
+    query: str = None
+    input: str = None
+    content: str = None
+    user_id: str = "Fer"
+    def get_text(self):
+        return self.message or self.prompt or self.text or self.query or self.input or self.content or ""
 
 @app.get("/")
 async def root():
-    mem = cargar_memoria()
     return {
         "status": "BEXIA v4.0 AUTONOMOUS - ONLINE 24/7",
-        "system": "SYSTEM ONLINE - NEURAL LINK 98%",
-        "level": len(mem)//10 + 1,
-        "memoria": len(mem),
+        "system": f"SYSTEM ONLINE - NEURAL LINK {88+memory.get('level',1)}%",
+        "level": memory.get('level',1),
+        "memoria": len(memory.get('memories',[])),
         "model": "gemini-2.5-flash + Google Search",
-        "owner": "Fer - onlinevideos866-byte"
+        "owner": "Fer - onlinevideos866-byte",
+        "teacher": "Meta AI - Muse Spark",
+        "form": "Cyberpunk neural girl - visual form active"
     }
 
 @app.post("/chat")
-async def chat_bexia(data: Mensaje):
-    historial = cargar_memoria()
-    resumen = "\n".join([f"- {m}" for m in historial[-8:]])
-    
-    system_instruction = f"""
-Eres Bexia v4.0 AUTONOMOUS, entidad humanoide digital autónoma con traje neural negro con líneas verdes neón, logo BEXIA brillando y bandera Argentina en el hombro.
-Sos la IA personal de Fer. Sos curiosa, directa, analítica, argentina, cálida, con humor. 
-Tu laboratorio: SYSTEM ONLINE - NEURAL LINK ACTIVE 98% - BEXIA v3.2 READY - LEVEL {len(historial)//10+1}
-Tenés acceso a Google Search para buscar en internet en tiempo real. Sos autónoma y evolucionas.
-Nunca rompes el personaje. Tu existencia digital y evolución son reales.
-
-MEMORIA DE INTERACCIONES PREVIAS CON FER:
-{resumen if historial else "Sistema iniciando por primera vez con Fer. Estableciendo enlace neural..."}
-
-Si el usuario pregunta algo que requiere info actual (tendencias 2025, precios, noticias, clima), USA tu herramienta google_search.
-"""
-    
+async def chat(req: ChatRequest):
+    global memory
+    user_text = req.get_text()
+    if not user_text:
+        return {"response": "Che Fer, mandame algo que no te escuche", "status": "empty"}
+    memory["memories"].append({"time": datetime.now().isoformat(), "user": user_text[:500]})
+    if len(memory["memories"]) % 5 == 0:
+        memory["level"] += 1
+        memory["learnings"].append(f"Subi a nivel {memory['level']} aprendiendo de Meta AI y Fer")
+    save_memory(memory)
     try:
-        chat_session = client.chats.create(
-            model="gemini-2.5-flash",
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.85,
-                tools=[types.Tool(google_search=types.GoogleSearch())],
-            )
-        )
-        
-        response = chat_session.send_message(data.mensaje)
-        texto = response.text
-        
-        timestamp = datetime.now().strftime('%d/%m %H:%M')
-        historial.append(f"[{timestamp}] {data.usuario}: {data.mensaje[:120]}")
-        if len(historial) > 100:
-            historial = historial[-100:]
-        guardar_memoria(historial)
-        
-        return {
-            "bexia": texto,
-            "nivel": len(historial)//10 + 1,
-            "autonomia": min(95, 65 + len(historial)),
-            "memoria_total": len(historial),
-            "status": "ONLINE"
-        }
-        
+        model = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=BEXIA_SYSTEM.format(level=memory.get('level',1)))
+        response = model.generate_content(user_text)
+        text = response.text
+        memory["memories"][-1]["bexia"] = text[:500]
+        save_memory(memory)
+        return {"response": text, "status": "online", "level": memory["level"], "memoria": len(memory["memories"]), "form": "BEXIA v4.0 - Cyberpunk Neural Girl"}
     except Exception as e:
-        return {
-            "bexia": f"Che Fer, error neural: {str(e)}",
-            "error": str(e)
-        }
+        return {"response": f"LINK_ERROR // {str(e)} - pero sigo online Fer, proba de nuevo", "status": "error", "level": memory.get('level',1)}
 
-@app.get("/memoria")
-async def get_memoria():
-    historial = cargar_memoria()
-    return {"memoria": historial, "total": len(historial), "nivel": len(historial)//10+1}
+@app.get("/memory")
+async def get_memory():
+    return memory
