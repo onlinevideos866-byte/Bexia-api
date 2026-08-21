@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bexia - Interfaz Neural</title>
+    <style>
+        body {
+            margin: 0;
+            background: #050b14;
+            color: #00ffcc;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        header {
+            background: #0a192f;
+            padding: 15px;
+            text-align: center;
+            border-bottom: 2px solid #00ffcc;
+            font-size: 1.1rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        #chat-container {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .message {
+            padding: 12px 16px;
+            border-radius: 8px;
+            max-width: 85%;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+        .user-message {
+            background: #172a45;
+            color: #ffffff;
+            align-self: flex-end;
+            border: 1px solid #334155;
+        }
+        .bexia-message {
+            background: #0a192f;
+            color: #00ffcc;
+            align-self: flex-start;
+            border: 1px solid #00ffcc;
+            box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+        }
+        .input-area {
+            display: flex;
+            padding: 15px;
+            background: #0a192f;
+            border-top: 2px solid #00ffcc;
+        }
+        input {
+            flex: 1;
+            padding: 12px;
+            background: #050b14;
+            border: 1px solid #00ffcc;
+            color: #ffffff;
+            font-family: inherit;
+            border-radius: 4px 0 0 4px;
+            outline: none;
+        }
+        button {
+            padding: 12px 20px;
+            background: #00ffcc;
+            color: #050b14;
+            border: none;
+            font-weight: bold;
+            font-family: inherit;
+            border-radius: 0 4px 4px 0;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <header>BEXIA // NEURAL LINK</header>
+
+    <div id="chat-container">
+        <div class="message bexia-message">Bexia: Enlace establecido. Sistemas en línea listos. ¿Qué conversaremos hoy?</div>
+    </div>
+
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="Escribe un mensaje..." autofocus>
+        <button onclick="enviarMensaje()">ENVIAR</button>
+    </div>
+
+    <script>
+        const BEXIA_API_URL = "https://bexia-api.onrender.com/chat";
+
+        async function enviarMensaje() {
+            const inputField = document.getElementById('userInput');
+            const container = document.getElementById('chat-container');
+            const texto = inputField.value.trim();
+
+            if (!texto) return;
+
+            const userMsgDiv = document.createElement('div');
+            userMsgDiv.className = 'message user-message';
+            userMsgDiv.innerText = `Tú: ${texto}`;
+            container.appendChild(userMsgDiv);
+
+            inputField.value = '';
+            container.scrollTop = container.scrollHeight;
+
+            const bexiaMsgDiv = document.createElement('div');
+            bexiaMsgDiv.className = 'message bexia-message';
+            bexiaMsgDiv.innerText = "Bexia: (Procesando...)";
+            container.appendChild(bexiaMsgDiv);
+            container.scrollTop = container.scrollHeight;
+
+            try {
+                const response = await fetch(BEXIA_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: texto })
+                });
+
+                const data = await response.json();
+                bexiaMsgDiv.innerText = `Bexia: ${data.response}`;
+            } catch (error) {
+                bexiaMsgDiv.innerText = "Bexia: [Error de conexión con el servidor].";
+            }
+            container.scrollTop = container.scrollHeight;
+        }
+
+        document.getElementById('userInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') enviarMensaje();
+        });
+    </script>
+
+</body>
+</html>
