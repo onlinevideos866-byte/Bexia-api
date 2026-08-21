@@ -12,7 +12,7 @@ def chat():
     
     try:
         # Pega tu clave API aqui mismo entre las comillas simples o dobles
-        api_key_fija = "PEGA_AQUÍ_TU_API_KEY_REAL"
+        api_key_fija = "AQ.Ab8RN6I0m8y96CV2_JbvMovYlEzJs1yFEiGZNEWWNnJt3pQiMw"
         
         client = genai.Client(api_key=api_key_fija)
         
