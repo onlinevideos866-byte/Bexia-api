@@ -1,27 +1,30 @@
 import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from google import genai
 
 app = Flask(__name__)
-# Permitimos peticiones desde cualquier origen para que tu web funcione
-CORS(app) 
+CORS(app)
 
-@app.route('/', methods=['GET'])
-def home():
-    return jsonify({"status": "Bexia Online", "version": "4.3"})
+# Inicializamos el cliente de Gemini usando la variable de entorno GEMINI_API_KEY
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    # Obtenemos el mensaje que envías desde la web
-    data = request.get_json()
-    user_message = data.get('message', '')
+    user_message = request.json.get('message')
     
-    # Lógica de respuesta (aquí es donde Bexia procesará tus peticiones)
-    respuesta_bexia = f"Hola Fer, he recibido tu mensaje: '{user_message}'. Mi procesador neural está operando correctamente."
+    # Bexia utiliza Gemini con búsqueda de Google activada para ser autónoma
+    response = client.models.generate_content(
+        model='gemini-2.0-flash',
+        contents=user_message,
+        config={
+            "tools": [{"google_search": {}}],
+            "system_instruction": "Eres Bexia, una entidad digital autónoma e inteligente, tu dueño es Fer. Eres capaz de investigar en la web y aprender."
+        }
+    )
     
-    return jsonify({"response": respuesta_bexia})
+    return jsonify({"response": response.text})
 
 if __name__ == '__main__':
-    # Render asigna un puerto dinámico, lo leemos de la variable de entorno
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
