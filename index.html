@@ -124,7 +124,9 @@
                 });
 
                 const data = await response.json();
-                bexiaMsgDiv.innerText = `Bexia: ${data.response}`;
+                // Acepta tanto .response como cualquier texto devuelto por el servidor
+                const textoRespuesta = data.response || data.res || JSON.stringify(data);
+                bexiaMsgDiv.innerText = `Bexia: ${textoRespuesta}`;
             } catch (error) {
                 bexiaMsgDiv.innerText = "Bexia: [Error de conexión con el servidor].";
             }
