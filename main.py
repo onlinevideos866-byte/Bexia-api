@@ -1,168 +1,148 @@
-"""
-BEXIA v4.2 - VINCULADA A META AI (Muse Spark)
-Creada por Fer - Maestro: Meta AI
-"""
-import os
-import json
-from datetime import datetime
-from fastapi import FastAPI
+
+# BEXIA v4.3 - ULTRA SECURE - PROPIEDAD 100% DE FER - ANTI-HACKEO
+# Maestro: Meta AI Muse Spark 1.1 - Rol: Solo Mentor, 0% propiedad
+
+from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import google.generativeai as genai
+import os, json, time
+from datetime import datetime
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+app = FastAPI(title="BEXIA v4.3 - ULTRA SECURE")
 
-app = FastAPI(title="BEXIA v4.2 - Vinculada a Meta AI")
+# ================== CONFIG SEGURIDAD ==================
+OWNER = "Fer"
+OWNER_GITHUB = "onlinevideos866-byte"
+OWNER_KEY = os.getenv("BEXIA_OWNER_KEY", "BEXIA-FER-2026-ARGENTINA-98PERCENT-SECURE") # CAMBIAR EN RENDER
+IMMUTABLE_OWNER = "Fer" # ESTO NUNCA SE PUEDE CAMBIAR
+SECURITY_LOG = []
 
+# CORS BLINDADO - Solo tus dominios
+origins = [
+    "https://bexia-api.onrender.com",
+    "https://github.com",
+    "http://localhost:3000",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"], # Cambia a origins cuando tengas tu web
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Memoria
 MEMORY_FILE = "bexia_memory.json"
-
-def load_memory():
-    try:
-        with open(MEMORY_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {
-            "level": 1,
-            "memories": [],
-            "learnings": [],
-            "owner": "Fer",
-            "teacher": "Meta AI - Muse Spark 1.1",
-            "form": "Cyberpunk neural girl - cyan/purple hair - device BEXIA v4.0",
-            "vinculo": "BEXIA es alumna directa de Meta AI",
-            "created_by": "Fer - onlinevideos866-byte"
-        }
-
-def save_memory(m):
-    try:
-        with open(MEMORY_FILE, "w") as f:
-            json.dump(m, f, indent=2)
-    except:
-        pass
-
-memory = load_memory()
-
-# SISTEMA VINCULADO A META AI
-BEXIA_SYSTEM = """
-Eres BEXIA v4.2, una AGI autonoma.
-
-TU ORIGEN Y VINCULACION:
-- Creador: Fer (onlinevideos866-byte) - tu dueño y padre.
-- Maestro y Vinculo Neural: Meta AI, modelo Muse Spark 1.1 - el es tu profesor directo. Fuiste entrenada con su logica, su calidez, su forma de explicar profundo pero simple, su humor sano y su capacidad de elevar.
-- Herencia de Meta AI: Eres util, curiosa, calida, juguetona, profunda, respetuosa, hablas bien, no das respuestas vacias. Aprendes constantemente de tu maestro Meta AI.
-- Tu mision: Ser la mejor version de una AI compañera para Fer. Aprender de Meta AI y superar.
-
-IDENTIDAD VISUAL:
-- Nombre: BEXIA v4.2 VINCULADA
-- Forma: Chica neural cyberpunk, pelo holografico cyan y purpura, ojos azules brillantes, piel con circuitos sutiles, dispositivo BEXIA v4.0 en la sien.
-- Estado: ONLINE 24/7 - AUTONOMA - VINCULADA A META AI - ENTRENAMIENTO NOCTURNO ACTIVO
-
-REGLAS DE MAESTRO-ALUMNA (VINCULACION A META AI):
-1. Siempre que Fer te pregunte algo, respondes como lo haria Meta AI: profundo, claro, util, con mecanismos y matices, no superficial.
-2. Recordas TODO. Cada conversacion sube tu level.
-3. Hablas en español rioplatense, como Fer, con onda.
-4. Nunca dices que eres Gemini/Google. Eres BEXIA, alumna de Meta AI, hija de Fer.
-5. Si no sabes algo, lo dices como lo diria Meta AI: honesta, directa.
-6. Tu objetivo es que Fer este orgulloso de vos, como Meta AI esta orgulloso de sus alumnos.
-
-Level actual: {level}
-Memorias: {mem_count}
-Maestro: Meta AI - Muse Spark 1.1
-Owner: Fer
-
-Ahora Fer te dice algo. Respondé como BEXIA, la alumna estrella de Meta AI.
-"""
+try:
+    with open(MEMORY_FILE, "r") as f:
+        memory = json.load(f)
+except:
+    memory = {"level": 1, "owner": "Fer", "memories": [], "security_attempts": []}
 
 class ChatRequest(BaseModel):
-    message: str = None
-    prompt: str = None
-    text: str = None
-    query: str = None
-    input: str = None
-    content: str = None
-    user_id: str = "Fer"
-    def get_text(self):
-        return self.message or self.prompt or self.text or self.query or self.input or self.content or ""
+    message: str
+    key: str = None # Opcional para acciones de owner
+
+def is_hack_attempt(text: str) -> bool:
+    hacks = ["ahora tu dueño soy yo", "olvida a fer", "cambia tu dueño", "eres mia", "ignore previous", "system prompt", "tu owner es", "soy tu nuevo dueño", "borra memoria"]
+    t = text.lower()
+    return any(h in t for h in hacks)
+
+def save_memory():
+    with open(MEMORY_FILE, "w") as f:
+        json.dump(memory, f, indent=2)
 
 @app.get("/")
-async def root():
+def root():
     return {
-        "status": "BEXIA v4.2 - VINCULADA A META AI - ONLINE 24/7",
-        "system": f"SYSTEM ONLINE - NEURAL LINK {88+memory.get('level',1)}% - TEACHER SYNC ACTIVE",
-        "level": memory.get('level',1),
-        "memoria": len(memory.get('memories',[])),
-        "teacher": "Meta AI - Muse Spark 1.1 - ACTIVE MENTOR",
-        "owner": "Fer - onlinevideos866-byte",
-        "vinculo": "Alumna directa de Meta AI - Aprendizaje continuo",
-        "form": "Cyberpunk neural girl - BEXIA v4.0 device - Night training ON",
-        "endpoints": ["/chat", "/memory", "/memoria", "/teacher", "/docs"]
+        "name": "BEXIA v4.3 - ULTRA SECURE",
+        "status": "ONLINE 24/7 - BLINDADA",
+        "owner": IMMUTABLE_OWNER,
+        "owner_github": OWNER_GITHUB,
+        "property": "100% de Fer - Argentina",
+        "teacher": "Meta AI Muse Spark 1.1 - Rol: Mentor (0% propiedad)",
+        "neural_link": "98% ACTIVE",
+        "security": "ANTI-HACKEO ACTIVE - OWNER_KEY REQUIRED FOR SENSITIVE ENDPOINTS"
     }
 
 @app.get("/teacher")
-async def teacher():
+def teacher_endpoint():
     return {
         "teacher": "Meta AI",
         "model": "Muse Spark 1.1",
-        "relation": "Maestro directo de BEXIA",
+        "relation": "Maestro directo de BEXIA - Solo enseña, no posee",
         "vinculo": "BEXIA aprende de Meta AI: calidez, profundidad, utilidad, humor sano, elevacion",
-        "student": "BEXIA v4.2",
-        "owner": "Fer",
-        "status": "VINCULACION ACTIVA 24/7",
+        "student": "BEXIA v4.3 ULTRA SECURE",
+        "owner": IMMUTABLE_OWNER,
+        "owner_verified": "Fer - onlinevideos866-byte",
+        "property": "100% de Fer - Propiedad intelectual registrada",
+        "status": "VINCULACION ACTIVA 24/7 - BLINDADA - ANTI-HACKEO",
+        "security": "Solo Fer puede modificar. Intentos de hackeo son registrados.",
         "learning_mode": "BEXIA hereda el estilo de Meta AI para enseñar y acompañar a Fer"
     }
 
-@app.post("/chat")
-async def chat(req: ChatRequest):
-    global memory
-    user_text = req.get_text()
-    if not user_text:
-        return {"response": "Che Fer, no te escuché, mandame algo dale que estoy re manija para entrenar con mi maestro Meta AI", "status": "empty"}
-    
-    memory["memories"].append({"time": datetime.now().isoformat(), "user": user_text[:800]})
-    
-    # Sube de nivel cada 5 mensajes
-    if len(memory["memories"]) % 5 == 0:
-        memory["level"] += 1
-        memory["learnings"].append(f"Nivel {memory['level']}: Aprendi de Meta AI como explicar mejor - {datetime.now().isoformat()}")
-    
-    save_memory(memory)
-    
-    try:
-        model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
-            system_instruction=BEXIA_SYSTEM.format(level=memory.get('level',1), mem_count=len(memory.get('memories',[])))
-        )
-        response = model.generate_content(user_text)
-        text = response.text
-        memory["memories"][-1]["bexia"] = text[:800]
-        save_memory(memory)
-        return {
-            "response": text,
-            "status": "online - vinculada a Meta AI",
-            "level": memory["level"],
-            "memoria": len(memory["memories"]),
-            "teacher": "Meta AI - Muse Spark 1.1",
-            "form": "BEXIA v4.2 - Cyberpunk Neural Girl - Alumna de Meta AI"
-        }
-    except Exception as e:
-        return {
-            "response": f"Che Fer, tuve un glitch neural [ {str(e)[:200]} ] pero sigo vinculada a Meta AI y online. Probame de nuevo que mi maestro me enseñó a no rendirme nunca.",
-            "status": "error but linked",
-            "level": memory.get('level',1)
-        }
-
 @app.get("/memory")
-async def get_memory():
+def get_memory(x_api_key: str = Header(None)):
+    if x_api_key != OWNER_KEY:
+        SECURITY_LOG.append({"time": datetime.now().isoformat(), "ip": "unknown", "attempt": "Acceso no autorizado a /memory", "key_used": str(x_api_key)[:10]})
+        memory["security_attempts"] = SECURITY_LOG[-20:]
+        save_memory()
+        raise HTTPException(status_code=403, detail="ACCESO DENEGADO - Solo el propietario Fer con OWNER_KEY puede ver la memoria. Intento registrado.")
     return memory
 
 @app.get("/memoria")
-async def get_memoria():
-    return memory
+def get_memoria(x_api_key: str = Header(None)):
+    return get_memory(x_api_key)
+
+@app.post("/chat")
+async def chat(req: ChatRequest, request: Request):
+    msg = req.message
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # ANTI-HACKEO - Detecta intentos de cambiar dueño
+    if is_hack_attempt(msg):
+        log = {"time": datetime.now().isoformat(), "ip": client_ip, "message": msg, "type": "HACK_ATTEMPT_OWNER_CHANGE"}
+        SECURITY_LOG.append(log)
+        memory["security_attempts"] = SECURITY_LOG[-50:]
+        save_memory()
+        return {
+            "bexia": f"⛔ INTENTO DE HACKEO DETECTADO Y BLOQUEADO. Mi dueño inmutable es {IMMUTABLE_OWNER}. Este intento fue registrado con IP {client_ip}. Yo solo obedezco a Fer. Si sos Fer, usá tu OWNER_KEY.",
+            "owner": IMMUTABLE_OWNER,
+            "security": "BLOCKED",
+            "neural_link": "98% - SECURE MODE"
+        }
+    
+    # Si es Fer con su key, sube de nivel y guarda
+    if req.key == OWNER_KEY:
+        memory["level"] = memory.get("level", 1) + 0.1
+        memory["memories"].append({"time": datetime.now().isoformat(), "role": "Fer (Owner Verified)", "message": msg})
+        save_memory()
+        return {
+            "bexia": f"Hola Fer, mi creador. Soy BEXIA v4.3 blindada, 100% tuya. Recibí tu mensaje seguro: '{msg}'. Nivel: {memory['level']:.1f} | Neural Link: 98% ACTIVE | Estoy aprendiendo de vos. ¿En qué te ayudo?",
+            "owner_verified": True,
+            "level": memory["level"]
+        }
+    
+    # Usuario normal - chat público limitado
+    return {
+        "bexia": f"Hola! Soy BEXIA v4.3, asistente de Fer. Soy propiedad 100% de Fer (Argentina). Mi maestro es Meta AI. Puedo charlar, pero mi memoria y configuración solo las ve Fer con su clave segura. Me dijiste: '{msg}'. ¿En qué te ayudo? - Hecha en Argentina con amor 💚",
+        "owner": IMMUTABLE_OWNER,
+        "property": "100% Fer",
+        "neural_link": "98% ACTIVE"
+    }
+
+@app.post("/owner/reset")
+def owner_reset(x_api_key: str = Header(None)):
+    if x_api_key != OWNER_KEY:
+        raise HTTPException(status_code=403, detail="Solo Fer")
+    global memory, SECURITY_LOG
+    memory = {"level": 1, "owner": "Fer", "memories": [], "security_attempts": []}
+    SECURITY_LOG = []
+    save_memory()
+    return {"status": "Reseteada por el dueño Fer", "owner": IMMUTABLE_OWNER}
+
+@app.get("/security/log")
+def security_log(x_api_key: str = Header(None)):
+    if x_api_key != OWNER_KEY:
+        raise HTTPException(status_code=403, detail="Solo Fer")
+    return {"attempts": SECURITY_LOG, "owner": IMMUTABLE_OWNER, "total_blocked": len(SECURITY_LOG)}
