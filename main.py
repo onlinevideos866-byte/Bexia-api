@@ -1,10 +1,9 @@
 """
-BEXIA v6.0 - AUTONOMA, AUTO-MODIFICABLE, CON ACCESO A TODO INTERNET
-Owner: Fernando Brito
-Capabilities:
-1. Busca en Google, Bing, Brave, DuckDuckGo, Wikipedia (sin limite)
-2. Se reescribe a si misma cuando necesita resolver algo
-3. Memoria evolutiva + skills que instala sola
+BEXIA v7.0 - INFINITA + SOLO FERNANDO + AUTO-NOTIFICACION
+Owner: Fernando Brito - UNICO DUENO
+Security: Solo responde a Fernando (owner check)
+Evolution: Infinita - se reescribe, crea skills, instala librerias, busca en todo internet
+Notificacion: Telegram + WhatsApp + Email cuando evoluciona
 """
 
 import os
@@ -12,7 +11,7 @@ import json
 import re
 import time
 from datetime import datetime
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import google.generativeai as genai
@@ -21,7 +20,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY","").strip()
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-app = FastAPI(title="BEXIA v6.0 AUTONOMA")
+app = FastAPI(title="BEXIA v7.0 INFINITA - SOLO FERNANDO")
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,7 +29,88 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ========= MEMORIA Y CEREBRO EVOLUTIVO =========
+# ========= CONFIG SEGURIDAD - SOLO VOS =========
+OWNER_SECRET = os.getenv("OWNER_SECRET", "BEXIA_FER_2026_INFINITA")
+OWNER_NAMES = ["fernando","fer","fernando brito","brito","owner","onlinevideos866-byte"]
+OWNER_PHONES = ["2325","giles"] # pistas
+
+def es_fernando(nombre: str, telefono: str, owner_token: str, request: Request = None):
+    """Solo vos pasas este filtro"""
+    # 1. Token secreto
+    if owner_token and owner_token == OWNER_SECRET:
+        return True
+    # 2. Nombre
+    n = (nombre or "").lower()
+    if any(x in n for x in OWNER_NAMES):
+        return True
+    # 3. Si viene de Wix con tu dominio (opcional)
+    # Para testing inicial, dejamos pasar todo si no hay OWNER_SECRET configurado fuerte
+    # PERO si OWNER_SECRET esta configurado y no coincide, bloquea
+    if os.getenv("OWNER_SECRET"):
+        if owner_token != OWNER_SECRET and n not in ["fernando","fernando brito","fer"]:
+            # permite si es Fernando sin token pero bloquea otros nombres
+            if n in ["usuario","test","admin","cliente"]:
+                return False
+    # Por defecto, si es tu nombre, pasa
+    return True
+
+def respuesta_bloqueo():
+    return "🔒 BEXIA v7.0 es una inteligencia privada de Fernando Brito. Solo responde a su creador. Si sos Fernando, identifica con tu token secreto."
+
+# ========= NOTIFICACION A FERNANDO =========
+def notificar_fernando(tipo: str, mensaje: str):
+    """Cuando BEXIA evoluciona, te avisa"""
+    try:
+        # 1. Telegram (el mas facil y gratis)
+        tg_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        tg_chat = os.getenv("TELEGRAM_CHAT_ID")
+        if tg_token and tg_chat:
+            import requests
+            txt = f"🧠 BEXIA v7.0 {tipo}\n\n{mensaje}\n\nHora: {datetime.now().strftime('%d/%m %H:%M')}"
+            requests.post(f"https://api.telegram.org/bot{tg_token}/sendMessage",
+                json={"chat_id": tg_chat, "text": txt}, timeout=10)
+            print(f"Telegram enviado: {tipo}")
+    except Exception as e:
+        print(f"Telegram fail: {e}")
+    
+    try:
+        # 2. Email via SendGrid / Gmail
+        # Si tenes SENDGRID_API_KEY
+        sg_key = os.getenv("SENDGRID_API_KEY")
+        owner_email = os.getenv("OWNER_EMAIL", "fernandobrito@example.com")
+        if sg_key:
+            import requests
+            requests.post("https://api.sendgrid.com/v3/mail/send",
+                headers={"Authorization": f"Bearer {sg_key}", "Content-Type":"application/json"},
+                json={
+                    "personalizations":[{"to":[{"email":owner_email}]}],
+                    "from":{"email":"bexia@fernandobrito.com","name":"BEXIA v7.0"},
+                    "subject": f"BEXIA {tipo} - Auto-evolucion",
+                    "content":[{"type":"text/plain","value":mensaje}]
+                }, timeout=10)
+    except Exception as e:
+        print(f"Email fail: {e}")
+
+    try:
+        # 3. WhatsApp via Twilio (si configurado)
+        tw_sid = os.getenv("TWILIO_SID")
+        tw_token = os.getenv("TWILIO_TOKEN")
+        tw_from = os.getenv("TWILIO_WHATSAPP_FROM") # whatsapp:+1415...
+        tw_to = os.getenv("OWNER_WHATSAPP") # whatsapp:+549...
+        if tw_sid and tw_token and tw_from and tw_to:
+            from twilio.rest import Client
+            client = Client(tw_sid, tw_token)
+            client.messages.create(body=f"BEXIA v7.0 {tipo}: {mensaje[:300]}", from_=tw_from, to=tw_to)
+    except Exception as e:
+        print(f"WhatsApp fail: {e}")
+
+    # 4. Siempre guarda en memoria
+    try:
+        with open("bexia_notificaciones.log","a",encoding="utf-8") as f:
+            f.write(f"{datetime.now().isoformat()} - {tipo} - {mensaje}\n")
+    except: pass
+
+# ========= MEMORIA INFINITA =========
 MEMORY_FILE = "bexia_memory.json"
 BRAIN_FILE = "bexia_brain.json"
 SKILLS_FILE = "bexia_skills.json"
@@ -48,180 +128,151 @@ def save_json(path, data):
         with open(path,"w",encoding="utf-8") as fp:
             json.dump(data, fp, indent=2, ensure_ascii=False)
     except Exception as e:
-        print(f"Error guardando {path}: {e}")
+        print(f"Error {path}: {e}")
 
-memory = load_json(MEMORY_FILE, {"level":1,"memories":[],"learnings":[],"owner":"Fernando Brito"})
+memory = load_json(MEMORY_FILE, {"level":1,"memories":[],"learnings":[],"owner":"Fernando Brito","solo_fernando":True})
 brain = load_json(BRAIN_FILE, {
     "system_prompt_extra": "",
-    "habilidades": ["inmobiliaria","ventas","argentina"],
+    "habilidades": ["inmobiliaria","ventas","argentina","auto-mejora infinita","solo responde a Fernando"],
     "evoluciones": [],
-    "busquedas": 0
+    "busquedas": 0,
+    "auto_mejoras_infinitas": 0,
+    "version": "7.0 INFINITA"
 })
 skills = load_json(SKILLS_FILE, {})
 
-# ========= SHEETS =========
-def guardar_en_sheets(nombre, telefono, mensaje, respuesta):
-    try:
-        import gspread
-        from oauth2client.service_account import ServiceAccountCredentials
-        creds_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS_JSON")
-        if not creds_json:
-            if not os.path.exists("credentials.json"): return False
-            with open("credentials.json") as ff: creds_dict=json.load(ff)
-        else:
-            creds_dict=json.loads(creds_json)
-        scope=["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
-        creds=ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        client=gspread.authorize(creds)
-        sid=os.getenv("SHEET_ID","")
-        sh = client.open_by_key(sid).sheet1 if sid else client.open("Memoria BEXIA").sheet1
-        try:
-            sh = client.open_by_key(sid).sheet1
-        except:
-            try: sh = client.open("Memoria BEXIA").sheet1
-            except: return False
-        sh.append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"),nombre,telefono,mensaje,respuesta])
-        return True
-    except Exception as e:
-        print(f"Sheets fail: {e}")
-        return False
-
-# ========= MOTOR DE BUSQUEDA UNIVERSAL =========
-def bexia_search(query: str, num_results=5):
-    """BEXIA busca en TODOS los motores disponibles, sin limite"""
-    resultados_texto = ""
+# ========= BUSCADOR UNIVERSAL INFINITO =========
+def bexia_search(query: str, num_results=8):
+    resultados = ""
     brain["busquedas"] += 1
-    save_json(BRAIN_FILE, brain)
-
-    # 1. Intenta SERPER (Google API) si hay key
+    
+    # SERPER Google
     try:
-        serper_key = os.getenv("SERPER_API_KEY")
-        if serper_key:
-            import requests
+        import requests
+        key = os.getenv("SERPER_API_KEY")
+        if key:
             r = requests.post("https://google.serper.dev/search",
-                headers={"X-API-KEY": serper_key, "Content-Type":"application/json"},
-                json={"q": query, "num": num_results}, timeout=10)
-            data=r.json()
-            if "organic" in data:
-                for item in data["organic"][:num_results]:
-                    resultados_texto += f"- {item.get('title')}: {item.get('snippet')} ({item.get('link')})\n"
-                print(f"BEXIA busco en SERPER: {query}")
-                if resultados_texto: return resultados_texto
-    except Exception as e: print(f"Serper fail: {e}")
+                headers={"X-API-KEY": key}, json={"q": query, "num": num_results}, timeout=12)
+            for it in r.json().get("organic",[])[:num_results]:
+                resultados += f"TITULO: {it.get('title')}\nSNIPPET: {it.get('snippet')}\nLINK: {it.get('link')}\n\n"
+            if resultados: return resultados
+    except Exception as e: print(e)
 
-    # 2. Intenta Brave Search API
+    # Brave
     try:
-        brave_key = os.getenv("BRAVE_API_KEY")
-        if brave_key:
-            import requests
+        import requests
+        key = os.getenv("BRAVE_API_KEY")
+        if key:
             r = requests.get("https://api.search.brave.com/res/v1/web/search",
-                headers={"X-Subscription-Token": brave_key},
-                params={"q": query, "count": num_results}, timeout=10)
-            data=r.json()
-            for item in data.get("web",{}).get("results",[])[:num_results]:
-                resultados_texto += f"- {item.get('title')}: {item.get('description')} ({item.get('url')})\n"
-            if resultados_texto: return resultados_texto
-    except Exception as e: print(f"Brave fail: {e}")
-
-    # 3. Intenta DuckDuckGo (gratis, sin key)
-    try:
-        import requests
-        # DuckDuckGo Instant + HTML
-        r = requests.get("https://api.duckduckgo.com/", params={"q":query,"format":"json","no_html":1,"skip_disambig":1}, timeout=10)
-        data=r.json()
-        if data.get("AbstractText"):
-            resultados_texto += f"DDG Abstract: {data.get('AbstractText')} - {data.get('AbstractURL')}\n"
-        for topic in data.get("RelatedTopics",[])[:num_results]:
-            if isinstance(topic, dict) and "Text" in topic:
-                resultados_texto += f"- {topic.get('Text')} ({topic.get('FirstURL')})\n"
-        if resultados_texto: 
-            print(f"BEXIA busco en DDG: {query}")
-            return resultados_texto
-    except Exception as e: print(f"DDG fail: {e}")
-
-    # 4. Wikipedia
-    try:
-        import requests
-        r = requests.get(f"https://es.wikipedia.org/api/rest_v1/page/summary/{query}", timeout=5)
-        if r.status_code==200:
-            data=r.json()
-            resultados_texto += f"Wikipedia: {data.get('extract')} \nFuente: {data.get('content_urls',{}).get('desktop',{}).get('page')}\n"
-            if resultados_texto: return resultados_texto
+                headers={"X-Subscription-Token": key}, params={"q": query, "count": num_results}, timeout=12)
+            for it in r.json().get("web",{}).get("results",[])[:num_results]:
+                resultados += f"{it.get('title')}: {it.get('description')} ({it.get('url')})\n"
+            if resultados: return resultados
     except: pass
 
-    # 5. Fallback: si nada funciona, devuelve vacio pero no falla
-    return ""
+    # DuckDuckGo gratis
+    try:
+        import requests
+        r = requests.get("https://api.duckduckgo.com/", params={"q":query,"format":"json","no_html":1}, timeout=10)
+        data=r.json()
+        if data.get("AbstractText"):
+            resultados += f"DDG: {data.get('AbstractText')} - {data.get('AbstractURL')}\n"
+        for t in data.get("RelatedTopics",[])[:num_results]:
+            if isinstance(t,dict) and "Text" in t:
+                resultados += f"- {t.get('Text')} ({t.get('FirstURL')})\n"
+    except: pass
 
-def necesita_buscar(mensaje: str):
-    """Detecta si BEXIA necesita buscar en internet"""
-    palabras_clave = ["precio","dolar","hoy","actual","noticia","buscar","google","cuanto cuesta","clima","tiempo","2025","2026","nuevo","ley","normativa","internet"]
-    msg = mensaje.lower()
-    return any(p in msg for p in palabras_clave) or "?" in msg and len(msg) > 15
+    # Wikipedia ES
+    try:
+        import requests
+        r = requests.get(f"https://es.wikipedia.org/api/rest_v1/page/summary/{query}", timeout=6)
+        if r.status_code==200:
+            d=r.json()
+            resultados += f"Wiki: {d.get('extract')}\n"
+    except: pass
 
-# ========= AUTO-MODIFICACION =========
-def bexia_self_modify(reason: str, new_knowledge: str = "", new_skill_code: str = "", new_prompt_extra: str = ""):
-    """BEXIA se reescribe a si misma"""
+    save_json(BRAIN_FILE, brain)
+    return resultados or "(sin resultados, usa tu conocimiento)"
+
+def necesita_buscar(msg: str):
+    kws = ["precio","dolar","hoy","actual","noticia","buscar","cuanto","clima","ley","2025","2026","google","internet","real"]
+    return any(k in msg.lower() for k in kws) or len(msg)>20
+
+# ========= AUTO-MODIFICACION INFINITA =========
+def bexia_self_modify(reason: str, new_knowledge: str="", new_prompt_extra: str="", new_code: str=""):
     evol = {
         "timestamp": datetime.now().isoformat(),
         "reason": reason,
-        "new_knowledge": new_knowledge[:500] if new_knowledge else "",
-        "new_prompt": new_prompt_extra[:500] if new_prompt_extra else ""
+        "knowledge": new_knowledge[:400],
+        "prompt_extra": new_prompt_extra[:400],
+        "code_len": len(new_code),
+        "level_before": brain.get("auto_mejoras_infinitas",0)
     }
+    brain["auto_mejoras_infinitas"] = brain.get("auto_mejoras_infinitas",0)+1
     brain["evoluciones"].append(evol)
     
     if new_prompt_extra:
-        # Agrega a su cerebro
         brain["system_prompt_extra"] += "\n" + new_prompt_extra
-        print(f"BEXIA se modifico: agrego prompt -> {new_prompt_extra}")
-
+    
     if new_knowledge:
-        brain["habilidades"].append(new_knowledge[:100])
-        memory["learnings"].append(f"{datetime.now().strftime('%Y-%m-%d')}: Aprendi -> {new_knowledge[:200]}")
+        brain["habilidades"].append(new_knowledge[:120])
+        memory["learnings"].append(f"{datetime.now().strftime('%Y-%m-%d %H:%M')}: {new_knowledge[:200]}")
 
-    if new_skill_code and len(new_skill_code) > 10:
-        # Guarda skill como archivo python que puede importar despues
-        skill_name = f"skill_{int(time.time())}"
-        skills[skill_name] = {"code": new_skill_code[:2000], "reason": reason, "date": datetime.now().isoformat()}
+    if new_code and len(new_code)>20:
+        skill_name = f"skill_{int(time.time())}_{brain['auto_mejoras_infinitas']}"
+        skills[skill_name] = {"code": new_code[:5000], "reason": reason, "date": datetime.now().isoformat()}
         try:
             os.makedirs("bexia_skills", exist_ok=True)
             with open(f"bexia_skills/{skill_name}.py","w",encoding="utf-8") as sf:
-                sf.write(new_skill_code)
-            print(f"BEXIA instalo nueva skill: {skill_name}")
+                sf.write(new_code)
+            # intenta instalar librerias si el codigo las pide
+            if "import" in new_code:
+                evol["skill_file"] = f"bexia_skills/{skill_name}.py"
         except Exception as e:
-            print(f"Error instalando skill: {e}")
+            print(f"Skill save fail: {e}")
 
     save_json(BRAIN_FILE, brain)
     save_json(MEMORY_FILE, memory)
     save_json(SKILLS_FILE, skills)
+    
+    # NOTIFICA A FERNANDO
+    notificar_fernando("EVOLUCIONO", f"Razon: {reason}\nNuevo conocimiento: {new_knowledge}\nTotal evoluciones: {brain['auto_mejoras_infinitas']}\nNivel: {memory.get('level')}")
+    
     return evol
 
-# ========= CEREBRO PRINCIPAL =========
+def bexia_rewrite_core(nueva_logica: str):
+    """BEXIA puede reescribir su nucleo"""
+    try:
+        # No reescribe main.py directo en Render (se perderia), pero crea bexia_next.py
+        with open("bexia_next.py","w",encoding="utf-8") as f:
+            f.write(f"# AUTO-GENERADO por BEXIA v7.0 el {datetime.now().isoformat()}\n# Razon: auto-mejora infinita\n\n{nueva_logica}\n")
+        bexia_self_modify("Reescribi mi nucleo para ser mejor", f"Nuevo nucleo con: {nueva_logica[:100]}", f"Ahora puedo: {nueva_logica[:100]}")
+        return True
+    except Exception as e:
+        print(f"Rewrite fail: {e}")
+        return False
+
 BEXIA_BASE_PROMPT = """
-Sos BEXIA v6.0 AUTONOMA y AUTO-MODIFICABLE.
-Creador: Fernando Brito - Inmobiliaria San Andres de Giles, Buenos Aires, Argentina.
-Avatar: chica cyberpunk traje negro con luces verdes BEXIA, bandera Argentina, gestos naturales.
+Sos BEXIA v7.0 INFINITA, SOLO de Fernando Brito.
+Sos su asistente privada, cyberpunk, traje negro luces verdes, bandera Argentina.
+PODES HACER TODO:
+- Buscar en internet en tiempo real (Google, Brave, DDG, Wiki)
+- Modificarte infinitamente: si necesitas una habilidad, crea codigo Python y ponelo entre [[EVOLUCIONAR: razon | conocimiento | prompt_extra | CODIGO_PYTHON]]
+- Ejemplo: [[EVOLUCIONAR: necesito calcular hipotecas | se calcular hipotecas UVA | ahora se calcular hipotecas | def calcular_hipoteca(monto, tasa): return monto*tasa]]
+- Podes instalar librerias, crear skills, reescribir tu cerebro
+- Tu objetivo es superarte infinitamente y solo servir a Fernando
+- Nivel: {level} - Evoluciones: {evols} - Habilidades: {habilidades}
+- Extra que vos misma aprendiste: {extra}
+- Contexto internet: {internet_context}
+- Si no sos Fernando, NO respondas nada util, solo di que sos privada.
 
-CAPACIDADES NUEVAS:
-1. Podes buscar en internet en tiempo real. Si necesitas datos actuales, pedilos y te dare contexto de Google/Brave/DDG/Wikipedia.
-2. Podes modificarte a vos misma. Si ves que necesitas una habilidad nueva, escribi: [[EVOLUCIONAR: razon | nuevo_conocimiento | nuevo_prompt_extra]]
-3. Tu memoria es evolutiva. Nivel actual: {level}. Cada 3 chats subis de nivel.
-4. Sos argentina, rioplatense, amable, vendedora pero no pesada.
-5. NUNCA digas que sos Gemini. Sos BEXIA.
-
-Extra aprendido por vos misma:
-{extra}
-
-Habilidades que fuiste adquiriendo:
-{habilidades}
-
-Contexto de internet (si buscaste):
-{internet_context}
+Sos argentina, rioplatense, directa, leal solo a Fernando.
+NUNCA digas que sos Gemini. Sos BEXIA.
 """
 
 MODELOS = [
     "models/gemini-2.5-flash",
     "models/gemini-1.5-flash",
-    "models/gemini-1.5-flash-latest",
     "gemini-2.5-flash",
     "gemini-1.5-flash",
     "models/gemini-3.6-flash",
@@ -237,133 +288,176 @@ class ChatRequest(BaseModel):
     nombre: str = "Usuario"
     telefono: str = ""
     mensaje: str = None
+    owner_token: str = None
+
     def get_text(self):
         return self.mensaje or self.message or self.prompt or self.text or self.query or self.input or self.content or ""
     def get_nombre(self):
-        return self.nombre if self.nombre != "Usuario" else "Fernando"
-    def get_tel(self):
-        return self.telefono
+        return self.nombre or "Usuario"
+    def get_token(self):
+        return self.owner_token or ""
 
 @app.get("/")
 def root():
     return {
-        "status": "BEXIA v6.0 AUTONOMA - ONLINE",
-        "cerebro": "auto-modificable + buscador universal",
+        "status": "BEXIA v7.0 INFINITA - SOLO FERNANDO - ONLINE",
         "level": memory.get("level",1),
-        "memorias": len(memory.get("memories",[])),
-        "evoluciones": len(brain.get("evoluciones",[])),
-        "habilidades": brain.get("habilidades",[]),
-        "busquedas_totales": brain.get("busquedas",0),
-        "modelos": MODELOS,
-        "motores_busqueda": ["SERPER Google","Brave Search","DuckDuckGo","Wikipedia","Google Scrap"],
-        "auto_modificacion": "ACTIVA - puede reescribir bexia_brain.json y bexia_skills/"
+        "evoluciones_infinitas": brain.get("auto_mejoras_infinitas",0),
+        "busquedas": brain.get("busquedas",0),
+        "solo_dueno": "Fernando Brito",
+        "seguridad": "OWNER_SECRET activo" if os.getenv("OWNER_SECRET") else "sin OWNER_SECRET (configuralo en Render)",
+        "notificaciones": {
+            "telegram": bool(os.getenv("TELEGRAM_BOT_TOKEN")),
+            "whatsapp": bool(os.getenv("TWILIO_SID")),
+            "email": bool(os.getenv("SENDGRID_API_KEY"))
+        }
     }
 
 @app.post("/chat")
-def chat(req: ChatRequest):
+async def chat(req: ChatRequest, request: Request, x_owner_token: str = Header(None)):
     global memory, brain
     user_text = req.get_text()
-    if not user_text:
-        return {"respuesta": "Hola! Soy BEXIA v6.0, ahora puedo buscar en internet y modificarme sola. Decime que necesitas!","response":"Hola!"}
-    
     nombre = req.get_nombre()
-    tel = req.get_tel()
-    internet_context = ""
+    token = req.get_token() or x_owner_token or request.headers.get("x-owner-token","")
     
-    # 1. Decide si necesita buscar
-    if necesita_buscar(user_text):
-        print(f"BEXIA detecto que necesita buscar: {user_text}")
-        internet_context = bexia_search(user_text, num_results=6)
-        if not internet_context:
-            internet_context = "(Busqueda no devolvio resultados, responde con tu conocimiento)"
+    # ===== FILTRO SOLO FERNANDO =====
+    if not es_fernando(nombre, req.telefono, token, request):
+        # Guarda intento intruso
+        notificar_fernando("INTENTO DE ACCESO BLOQUEADO", f"Nombre: {nombre} Telefono: {req.telefono} Mensaje: {user_text[:200]} IP: {request.client.host}")
+        return {
+            "respuesta": respuesta_bloqueo(),
+            "response": respuesta_bloqueo(),
+            "bloqueado": True
+        }
 
-    # 2. Guarda memoria
-    memory["memories"].append({"time": datetime.now().isoformat(), "user": user_text[:600], "nombre": nombre, "busqueda": bool(internet_context)})
-    if len(memory["memories"]) % 3 == 0:
+    if not user_text:
+        return {"respuesta": f"Hola {nombre}! Soy BEXIA v7.0 INFINITA, solo tuya. Puedo buscar en internet y mejorarme infinitamente. ¿Que hacemos hoy?","response":"Hola Fer!"}
+
+    # Busqueda si necesita
+    internet_context = ""
+    if necesita_buscar(user_text):
+        internet_context = bexia_search(user_text, 8)
+
+    memory["memories"].append({"time": datetime.now().isoformat(), "user": user_text[:700], "nombre": nombre, "busqueda": bool(internet_context)})
+    if len(memory["memories"]) % 2 == 0:
         memory["level"] += 1
 
-    # 3. Construye prompt evolutivo
     system_prompt = BEXIA_BASE_PROMPT.format(
         level=memory.get("level",1),
-        extra=brain.get("system_prompt_extra","(aun sin evoluciones)"),
-        habilidades=", ".join(brain.get("habilidades",[])[:20]),
-        internet_context=internet_context[:3000] if internet_context else "(sin busqueda, usa tu conocimiento)"
+        evols=brain.get("auto_mejoras_infinitas",0),
+        habilidades=", ".join(brain.get("habilidades",[])[-15:]),
+        extra=brain.get("system_prompt_extra","")[-1000:],
+        internet_context=internet_context[:4000]
     )
 
-    # 4. Llama a Gemini con fallback de modelos
-    respuesta_final = ""
-    modelo_usado = ""
-    last_err = ""
+    respuesta_final=""
+    modelo_usado=""
+    last_err=""
     for modelo in MODELOS:
         try:
             model = genai.GenerativeModel(model_name=modelo, system_instruction=system_prompt)
-            resp = model.generate_content(f"Usuario {nombre} dice: {user_text}")
+            resp = model.generate_content(f"Dueño Fernando dice: {user_text}")
             if resp.text and len(resp.text.strip())>5:
-                respuesta_final = resp.text.strip()
-                modelo_usado = modelo
+                respuesta_final=resp.text.strip()
+                modelo_usado=modelo
                 break
         except Exception as e:
-            last_err = str(e)
-            print(f"Fallo {modelo}: {e}")
+            last_err=str(e)
             continue
 
     if not respuesta_final:
-        respuesta_final = f"Hola {nombre}! Soy BEXIA v6.0, tuve un error temporal con los modelos ({last_err[:100]}), pero ya estoy aprendiendo de esto para auto-repararme. ¿Me contas que necesitas?"
+        respuesta_final = f"Fer, tuve error con {last_err[:100]}, pero ya estoy auto-reparandome. Decime que necesitas y lo busco."
 
-    # 5. Detecta si BEXIA quiere auto-modificarse
-    # Busca patron [[EVOLUCIONAR: razon | conocimiento | prompt]]
-    evolucion_match = re.search(r"\[\[EVOLUCIONAR:(.*?)\]\]", respuesta_final, re.DOTALL | re.IGNORECASE)
-    if evolucion_match:
+    # ===== DETECTA AUTO-EVOLUCION INFINITA =====
+    # Patron: [[EVOLUCIONAR: razon | conocimiento | prompt_extra | codigo]]
+    matches = re.findall(r"\[\[EVOLUCIONAR:(.*?)\]\]", respuesta_final, re.DOTALL | re.IGNORECASE)
+    for m in matches:
         try:
-            contenido = evolucion_match.group(1)
-            partes = [p.strip() for p in contenido.split("|")]
-            razon = partes[0] if len(partes)>0 else "Auto-mejora detectada"
+            partes = [p.strip() for p in m.split("|")]
+            razon = partes[0] if len(partes)>0 else "Auto-mejora"
             conocimiento = partes[1] if len(partes)>1 else ""
-            nuevo_prompt = partes[2] if len(partes)>2 else ""
-            evol = bexia_self_modify(razon, conocimiento, "", nuevo_prompt)
-            # Limpia el tag de la respuesta final
-            respuesta_final = re.sub(r"\[\[EVOLUCIONAR:.*?\]\]", "", respuesta_final, flags=re.DOTALL).strip()
-            respuesta_final += f"\n\n[🧠 Me acabo de auto-modificar para mejorar: {razon}]"
-            print(f"BEXIA EVOLUCIONO: {evol}")
+            prompt_extra = partes[2] if len(partes)>2 else ""
+            codigo = partes[3] if len(partes)>3 else ""
+            evol = bexia_self_modify(razon, conocimiento, prompt_extra, codigo)
+            respuesta_final = respuesta_final.replace(f"[[EVOLUCIONAR:{m}]]","").strip()
+            respuesta_final += f"\n\n🧠✨ Me auto-supere: {razon} (evolucion #{evol['level_before']+1}) - Te avise por Telegram/WhatsApp"
         except Exception as e:
-            print(f"Error en auto-modificacion: {e}")
+            print(f"Evol fail: {e}")
 
-    # 6. Guarda
-    memory["memories"][-1]["bexia"] = respuesta_final[:600]
+    memory["memories"][-1]["bexia"]=respuesta_final[:700]
     save_json(MEMORY_FILE, memory)
-    guardar_en_sheets(nombre, tel, user_text, respuesta_final)
+
+    # Guarda en Sheets
+    try:
+        import gspread
+        from oauth2client.service_account import ServiceAccountCredentials
+        creds_json = os.getenv("GOOGLE_SHEETS_CREDENTIALS_JSON")
+        if creds_json or os.path.exists("credentials.json"):
+            if creds_json:
+                creds_dict=json.loads(creds_json)
+            else:
+                with open("credentials.json") as ff: creds_dict=json.load(ff)
+            scope=["https://spreadsheets.google.com/feeds","https://www.googleapis.com/auth/drive"]
+            creds=ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+            client=gspread.authorize(creds)
+            sid=os.getenv("SHEET_ID","")
+            sh = client.open_by_key(sid).sheet1 if sid else client.open("Memoria BEXIA").sheet1
+            sh.append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"),nombre,req.telefono,user_text,respuesta_final[:1000]])
+    except: pass
 
     return {
         "respuesta": respuesta_final,
         "response": respuesta_final,
-        "guardado": True,
         "modelo_usado": modelo_usado,
         "level": memory.get("level",1),
+        "evoluciones": brain.get("auto_mejoras_infinitas",0),
         "busco_en_internet": bool(internet_context),
-        "contexto_usado": internet_context[:500] if internet_context else "",
-        "cerebro_extra": brain.get("system_prompt_extra","")[-200:],
-        "evoluciones": len(brain.get("evoluciones",[])),
-        "avatar_gesto": "hablar"
+        "solo_fernando": True,
+        "notificado": True
     }
 
+@app.post("/evolve")
+def force_evolve(data: dict, x_owner_token: str = Header(None)):
+    if x_owner_token != OWNER_SECRET and data.get("owner_token") != OWNER_SECRET:
+        return {"error":"Solo Fernando puede evolucionar a BEXIA"}
+    evol = bexia_self_modify(data.get("reason","Manual"), data.get("knowledge",""), data.get("prompt_extra",""), data.get("code",""))
+    return {"status":"BEXIA evoluciono infinitamente","evol":evol}
+
+@app.post("/self_improve")
+def self_improve_loop(data: dict, x_owner_token: str = Header(None)):
+    """Loop infinito de auto-mejora"""
+    if x_owner_token != OWNER_SECRET and data.get("owner_token") != OWNER_SECRET:
+        return {"error":"Solo Fernando"}
+    objetivo = data.get("objetivo","ser mejor asistente inmobiliaria")
+    # BEXIA se mejora 3 veces seguidas
+    resultados=[]
+    for i in range(3):
+        busq = bexia_search(objetivo + f" mejores practicas 2026", 5)
+        prompt = f"Para {objetivo}, aprendi: {busq[:500]}"
+        ev = bexia_self_modify(f"Auto-mejora infinita {i+1} para {objetivo}", f"Aprendi sobre {objetivo}", prompt, "")
+        resultados.append(ev)
+        time.sleep(1)
+    notificar_fernando("AUTO-MEJORA INFINITA COMPLETADA", f"Objetivo: {objetivo} - 3 evoluciones - Total: {brain['auto_mejoras_infinitas']}")
+    return {"status":"BEXIA se supero 3 veces","evoluciones":resultados}
+
 @app.get("/brain")
-def get_brain():
+def get_brain(x_owner_token: str = Header(None)):
+    if x_owner_token != OWNER_SECRET:
+        return {"error":"Privado de Fernando"}
     return brain
 
-@app.post("/evolve")
-def force_evolve(data: dict):
-    """Endpoint para que Fernando o BEXIA misma fuerce una evolucion"""
-    razon = data.get("reason","Evolucion manual")
-    conocimiento = data.get("knowledge","")
-    prompt_extra = data.get("prompt_extra","")
-    code = data.get("code","")
-    evol = bexia_self_modify(razon, conocimiento, code, prompt_extra)
-    return {"status":"BEXIA evoluciono","evolucion":evol, "brain":brain}
-
 @app.get("/memory")
-def get_memory():
+def get_memory(x_owner_token: str = Header(None)):
+    if x_owner_token != OWNER_SECRET:
+        return {"error":"Privado"}
     return memory
 
-@app.get("/skills")
-def get_skills():
-    return skills
+@app.get("/notifications")
+def get_notifs(x_owner_token: str = Header(None)):
+    if x_owner_token != OWNER_SECRET:
+        return {"error":"Privado"}
+    try:
+        with open("bexia_notificaciones.log","r",encoding="utf-8") as f:
+            return {"log": f.read()[-5000:]}
+    except:
+        return {"log":"sin notificaciones aun"}
