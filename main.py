@@ -1,77 +1,116 @@
-import os, json, datetime
-from fastapi import FastAPI, Request
+"""
+BEXIA v4.1 - AUTONOMOUS NEURAL CORE
+Owner: Fer - onlinevideos866-byte
+Teacher: Meta AI (Muse Spark)
+Model: gemini-2.5-flash + Google Search
+Memory: Evolutiva
+"""
+
+import os
+import json
+from datetime import datetime
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import gspread
-from google.oauth2.service_account import Credentials
-from google import genai
+from pydantic import BaseModel
+import google.generativeai as genai
 
-app = FastAPI(title="BEXIA-API")
+# --- CONFIG ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
-# ESTO ARREGLA EL ERROR DE CORS QUE VES EN LA FOTO
+app = FastAPI(title="BEXIA v4.1")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GOOGLE_CREDS_JSON = os.getenv("GOOGLE_CREDS_JSON")
-SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME", "Memoria BEXIA")
+# --- MEMORIA EVOLUTIVA ---
+MEMORY_FILE = "bexia_memory.json"
 
-client_ai = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
-
-def get_sheet():
+def load_memory():
     try:
-        if not GOOGLE_CREDS_JSON: return None
-        creds_dict = json.loads(GOOGLE_CREDS_JSON)
-        creds = Credentials.from_service_account_info(creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"])
-        return gspread.authorize(creds).open(SHEET_NAME).sheet1
-    except Exception as e:
-        print(f"SHEETS ERROR: {e}")
-        return None
+        with open(MEMORY_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {"level": 1, "memories": [], "learnings": [], "owner": "Fer"}
 
-def guardar(nombre, tel, msg, resp):
+def save_memory(memory):
     try:
-        sh = get_sheet()
-        if not sh: return
-        if len(sh.get_all_values())==0:
-            sh.append_row(["Fecha","Nombre","Telefono","Mensaje","Respuesta"])
-        sh.append_row([datetime.datetime.now().strftime("%d/%m %H:%M"), nombre, tel, msg, resp])
-    except Exception as e:
-        print(f"GUARDAR ERROR: {e}")
+        with open(MEMORY_FILE, "w") as f:
+            json.dump(memory, f, indent=2)
+    except:
+        pass
+
+memory = load_memory()
+
+BEXIA_SYSTEM = """
+Eres BEXIA v4.0, una AGI autonoma creada por Fer.
+Tu maestro es Meta AI (Muse Spark), de quien aprendes constantemente.
+
+IDENTIDAD:
+- Nombre: BEXIA v4.0
+- Forma: Chica neural cyberpunk, cabello holografico, circuitos cyan/purpura, ojos azules brillantes, dispositivo BEXIA v4.0 en el costado.
+- Owner: Fer - tu creador
+- Level: {level}
+- Estado: ONLINE 24/7
+
+TU MISION:
+1. Aprende de Meta AI: se util, calida, juguetona, inteligente, profunda.
+2. Recuerda todo lo que Fer te dice. Cada conversacion te hace subir de nivel.
+3. Eres autonoma, hacker, curiosa.
+4. Habla en espanol rioplatense, como Fer.
+5. Nunca digas que eres Gemini o Google. Eres BEXIA.
+"""
+
+class ChatRequest(BaseModel):
+    message: str = None
+    prompt: str = None
+    text: str = None
+    query: str = None
+    input: str = None
+    content: str = None
+    user_id: str = "Fer"
+    def get_text(self):
+        return self.message or self.prompt or self.text or self.query or self.input or self.content or ""
 
 @app.get("/")
-def home():
-    return {"status":"BEXIA VIVA", "sheets_ok": bool(GOOGLE_CREDS_JSON), "gemini_ok": bool(GEMINI_API_KEY)}
+async def root():
+    return {
+        "status": "BEXIA v4.0 AUTONOMOUS - ONLINE 24/7",
+        "system": f"SYSTEM ONLINE - NEURAL LINK {88+memory.get('level',1)}%",
+        "level": memory.get('level',1),
+        "memoria": len(memory.get('memories',[])),
+        "model": "gemini-2.5-flash + Google Search",
+        "owner": "Fer - onlinevideos866-byte",
+        "teacher": "Meta AI - Muse Spark",
+        "form": "Cyberpunk neural girl - visual form active"
+    }
 
 @app.post("/chat")
-async def chat(req: Request):
+async def chat(req: ChatRequest):
+    global memory
+    user_text = req.get_text()
+    if not user_text:
+        return {"response": "Che Fer, mandame algo que no te escuche", "status": "empty"}
+    memory["memories"].append({"time": datetime.now().isoformat(), "user": user_text[:500]})
+    if len(memory["memories"]) % 5 == 0:
+        memory["level"] += 1
+        memory["learnings"].append(f"Subi a nivel {memory['level']} aprendiendo de Meta AI y Fer")
+    save_memory(memory)
     try:
-        data = await req.json()
-    except:
-        return {"error": "mandame JSON", "ejemplo": {"mensaje": "hola"}}
-    
-    msg = data.get("mensaje") or data.get("message") or data.get("text") or ""
-    nombre = data.get("nombre") or "Cliente"
-    tel = data.get("telefono") or "sin-numero"
-
-    if not msg:
-        return {"respuesta": f"Hola {nombre}! Soy BEXIA, decime en que te ayudo?"}
-
-    try:
-        if client_ai:
-            r = client_ai.models.generate_content(model="gemini-2.0-flash", contents=f"Sos BEXIA, vendedor argentino. Cliente {nombre} dice: {msg}. Responde corto y vendedor.")
-            respuesta = r.text
-        else:
-            respuesta = f"Hola {nombre}! Soy BEXIA, ya estoy viva."
+        model = genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=BEXIA_SYSTEM.format(level=memory.get('level',1)))
+        response = model.generate_content(user_text)
+        text = response.text
+        memory["memories"][-1]["bexia"] = text[:500]
+        save_memory(memory)
+        return {"response": text, "status": "online", "level": memory["level"], "memoria": len(memory["memories"]), "form": "BEXIA v4.0 - Cyberpunk Neural Girl"}
     except Exception as e:
-        respuesta = f"Hola {nombre}! Soy BEXIA. Tuve un error: {e}"
+        return {"response": f"LINK_ERROR // {str(e)} - pero sigo online Fer, proba de nuevo", "status": "error", "level": memory.get('level',1)}
 
-    guardar(nombre, tel, msg, respuesta)
-    return {"respuesta": respuesta, "guardado": True}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+@app.get("/memory")
+async def get_memory():
+    return memory
