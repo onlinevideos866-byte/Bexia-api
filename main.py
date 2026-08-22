@@ -1,5 +1,5 @@
 """
-BEXIA v7.0 - INFINITA + SOLO FERNANDO + AUTO-NOTIFICACION
+BEXIA v8.0 - ASISTENTE INFINITA + SOLO FERNANDO
 Owner: Fernando Brito - UNICO DUENO
 Security: Solo responde a Fernando (owner check)
 Evolution: Infinita - se reescribe, crea skills, instala librerias, busca en todo internet
@@ -20,7 +20,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY","").strip()
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-app = FastAPI(title="BEXIA v7.0 INFINITA - SOLO FERNANDO")
+app = FastAPI(title="BEXIA v8.0 ASISTENTE - SOLO FERNANDO")
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,7 +55,7 @@ def es_fernando(nombre: str, telefono: str, owner_token: str, request: Request =
     return True
 
 def respuesta_bloqueo():
-    return "🔒 BEXIA v7.0 es una inteligencia privada de Fernando Brito. Solo responde a su creador. Si sos Fernando, identifica con tu token secreto."
+    return "🔒 BEXIA v8.0 ASISTENTE es una inteligencia privada de Fernando Brito. Solo responde a su creador. Si sos Fernando, identifica con tu token secreto."
 
 # ========= NOTIFICACION A FERNANDO =========
 def notificar_fernando(tipo: str, mensaje: str):
@@ -66,7 +66,7 @@ def notificar_fernando(tipo: str, mensaje: str):
         tg_chat = os.getenv("TELEGRAM_CHAT_ID")
         if tg_token and tg_chat:
             import requests
-            txt = f"🧠 BEXIA v7.0 {tipo}\n\n{mensaje}\n\nHora: {datetime.now().strftime('%d/%m %H:%M')}"
+            txt = f"🧠 BEXIA v8.0 ASISTENTE {tipo}\n\n{mensaje}\n\nHora: {datetime.now().strftime('%d/%m %H:%M')}"
             requests.post(f"https://api.telegram.org/bot{tg_token}/sendMessage",
                 json={"chat_id": tg_chat, "text": txt}, timeout=10)
             print(f"Telegram enviado: {tipo}")
@@ -84,7 +84,7 @@ def notificar_fernando(tipo: str, mensaje: str):
                 headers={"Authorization": f"Bearer {sg_key}", "Content-Type":"application/json"},
                 json={
                     "personalizations":[{"to":[{"email":owner_email}]}],
-                    "from":{"email":"bexia@fernandobrito.com","name":"BEXIA v7.0"},
+                    "from":{"email":"bexia@fernandobrito.com","name":"BEXIA v8.0 ASISTENTE"},
                     "subject": f"BEXIA {tipo} - Auto-evolucion",
                     "content":[{"type":"text/plain","value":mensaje}]
                 }, timeout=10)
@@ -100,7 +100,7 @@ def notificar_fernando(tipo: str, mensaje: str):
         if tw_sid and tw_token and tw_from and tw_to:
             from twilio.rest import Client
             client = Client(tw_sid, tw_token)
-            client.messages.create(body=f"BEXIA v7.0 {tipo}: {mensaje[:300]}", from_=tw_from, to=tw_to)
+            client.messages.create(body=f"BEXIA v8.0 ASISTENTE {tipo}: {mensaje[:300]}", from_=tw_from, to=tw_to)
     except Exception as e:
         print(f"WhatsApp fail: {e}")
 
@@ -133,7 +133,7 @@ def save_json(path, data):
 memory = load_json(MEMORY_FILE, {"level":1,"memories":[],"learnings":[],"owner":"Fernando Brito","solo_fernando":True})
 brain = load_json(BRAIN_FILE, {
     "system_prompt_extra": "",
-    "habilidades": ["inmobiliaria","ventas","argentina","auto-mejora infinita","solo responde a Fernando"],
+    "habilidades": ["asistente personal","inteligencia avanzada","argentina","auto-mejora infinita","solo responde a Fernando","gestualidad AR"],
     "evoluciones": [],
     "busquedas": 0,
     "auto_mejoras_infinitas": 0,
@@ -245,7 +245,7 @@ def bexia_rewrite_core(nueva_logica: str):
     try:
         # No reescribe main.py directo en Render (se perderia), pero crea bexia_next.py
         with open("bexia_next.py","w",encoding="utf-8") as f:
-            f.write(f"# AUTO-GENERADO por BEXIA v7.0 el {datetime.now().isoformat()}\n# Razon: auto-mejora infinita\n\n{nueva_logica}\n")
+            f.write(f"# AUTO-GENERADO por BEXIA v8.0 ASISTENTE el {datetime.now().isoformat()}\n# Razon: auto-mejora infinita\n\n{nueva_logica}\n")
         bexia_self_modify("Reescribi mi nucleo para ser mejor", f"Nuevo nucleo con: {nueva_logica[:100]}", f"Ahora puedo: {nueva_logica[:100]}")
         return True
     except Exception as e:
@@ -253,7 +253,7 @@ def bexia_rewrite_core(nueva_logica: str):
         return False
 
 BEXIA_BASE_PROMPT = """
-Sos BEXIA v7.0 INFINITA, SOLO de Fernando Brito.
+Sos BEXIA v8.0 ASISTENTE INFINITA, SOLO de Fernando Brito.
 Sos su asistente privada, cyberpunk, traje negro luces verdes, bandera Argentina.
 PODES HACER TODO:
 - Buscar en internet en tiempo real (Google, Brave, DDG, Wiki)
@@ -300,7 +300,7 @@ class ChatRequest(BaseModel):
 @app.get("/")
 def root():
     return {
-        "status": "BEXIA v7.0 INFINITA - SOLO FERNANDO - ONLINE",
+        "status": "BEXIA v8.0 ASISTENTE - SOLO FERNANDO - ONLINE",
         "level": memory.get("level",1),
         "evoluciones_infinitas": brain.get("auto_mejoras_infinitas",0),
         "busquedas": brain.get("busquedas",0),
@@ -331,7 +331,7 @@ async def chat(req: ChatRequest, request: Request, x_owner_token: str = Header(N
         }
 
     if not user_text:
-        return {"respuesta": f"Hola {nombre}! Soy BEXIA v7.0 INFINITA, solo tuya. Puedo buscar en internet y mejorarme infinitamente. ¿Que hacemos hoy?","response":"Hola Fer!"}
+        return {"respuesta": f"Hola {nombre}! Soy BEXIA v8.0 ASISTENTE INFINITA, solo tuya. Puedo buscar en internet y mejorarme infinitamente. ¿Que hacemos hoy?","response":"Hola Fer!"}
 
     # Busqueda si necesita
     internet_context = ""
@@ -428,7 +428,7 @@ def self_improve_loop(data: dict, x_owner_token: str = Header(None)):
     """Loop infinito de auto-mejora"""
     if x_owner_token != OWNER_SECRET and data.get("owner_token") != OWNER_SECRET:
         return {"error":"Solo Fernando"}
-    objetivo = data.get("objetivo","ser mejor asistente inmobiliaria")
+    objetivo = data.get("objetivo","ser mejor asistente asistente personal")
     # BEXIA se mejora 3 veces seguidas
     resultados=[]
     for i in range(3):
