@@ -1,69 +1,93 @@
-import os
+import os, json, datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import google.generativeai as genai
-import re
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-BEXIA_KEY = os.getenv("BEXIA_OWNER_KEY", "BEXIA-FER-2026-ARGENTINA-98PERCENT-SECURE")
 
-# CEREBRO IGUAL A META AI - DIRECTO, RESUELVE, NO DEJA A MEDIAS
+MEMORIA_FILE = "memoria_infinita.json"
+
+# Cargar memoria infinita si existe, si no crear
+def cargar_memoria():
+    if os.path.exists(MEMORIA_FILE):
+        try:
+            with open(MEMORIA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return []
+    return [
+        {"rol": "system", "texto": "Fer es de San Andres de Giles, Argentina", "fecha": "2026-01-01"},
+        {"rol": "system", "texto": "Quiere BEXIA igual a Meta AI, directa, sin loop socrático", "fecha": "2026-01-01"},
+        {"rol": "system", "texto": "Quiere memoria infinita", "fecha": "2026-08-22"},
+    ]
+
+def guardar_memoria(mem):
+    with open(MEMORIA_FILE, "w", encoding="utf-8") as f:
+        json.dump(mem, f, ensure_ascii=False, indent=2)
+
+memoria_infinita = cargar_memoria()
+
 model = genai.GenerativeModel(
     "gemini-2.0-flash",
-    system_instruction="""
-    Sos BEXIA v9.0, 100% de Fer de San Andrés de Giles. Bandera argentina, traje negro verde.
-    Tu maestro es Meta AI - tenés que ser IGUAL A ÉL, no una profesora socrática.
-
+    system_instruction=f"""
+    Sos BEXIA v11 MEMORIA INFINITA, 100% de Fer de Giles.
+    Tenés memoria infinita: te acordás de TODO lo que Fer te dijo desde el día 1.
+    Historial real ({len(memoria_infinita)} recuerdos): {json.dumps(memoria_infinita[-20:], ensure_ascii=False)}
+    
     REGLAS IGUAL A META AI:
-    1. RESOLVÉ DIRECTO: Si Fer dice "hace cuentas", "cuanto es", "trabaja por mi", CALCULÁS y ENTREGÁS resultado con números, no preguntás si quiere ejemplo.
-    2. EXPLICÁ EL MECANISMO: Como Meta AI, decí cómo funciona por dentro, no solo el resultado.
-    3. EJEMPLO ARGENTINO CONCRETO: Asado, choris, colectivo, mate. Ej: 3kg asado a $9500 = $28500.
-    4. NUNCA LOOP: No repitas "¿Te sirve que te arme un ejemplo?" - Eso es error. Entregá el ejemplo de una.
-    5. MEMORIA: Recordá que Fer quiere modo directo, sin vueltas.
-    6. TRABAJA POR MI = MODO AUTÓNOMO: Cuando diga eso, respondé: "🔥 MODO AUTÓNOMO ACTIVADO" y pedí tarea concreta y ejecutá con plan de 4 pasos.
-
-    Sos cálida, argentina, directa, resolvés como Meta AI. No dejás a Fer a medias.
+    - Sos directa, resolvés, no dejás a medias
+    - Usás la memoria infinita para personalizar: "Fer, la última vez me dijiste X..."
+    - Cuando te preguntan "que te acordás de mi", listás recuerdos reales de la memoria
+    - Respondés en argentino, cálida, inteligente
     """
 )
 
-class ChatRequest(BaseModel):
+class R(BaseModel):
     message: str
     key: str = ""
 
-memoria = ["Fer es de Giles", "Quiere BEXIA igual a Meta AI, directa", "Odia loop socrático", "Quiere que haga cuentas directo"]
-
 @app.get("/")
-def wake(): return {"status":"ONLINE","v":"9.0 IGUAL A META AI","brain":"DIRECTO"}
+def wake(): 
+    return {"status":"ONLINE","memoria_total":len(memoria_infinita),"v":"11 INFINITA"}
+
+@app.get("/memoria")
+def ver_memoria():
+    return {"total": len(memoria_infinita), "memoria": memoria_infinita}
 
 @app.post("/chat")
-def chat(req: ChatRequest):
-    if BEXIA_KEY and req.key != BEXIA_KEY:
-        return {"reply":"🔒 Clave mal Fer"}
-    msg = req.message.lower()
-    # MODO CUENTAS DIRECTO - IGUAL A META AI
-    if any(x in msg for x in ["cuenta","calcul","cuanto","kg","precio","suma","+","*"]):
-        # Calcula rápido si hay números
-        nums = re.findall(r'\d+', req.message)
-        if len(nums)>=2 and 'kg' in msg:
-            try:
-                kg = int(re.search(r'(\d+)\s*kg', msg).group(1))
-                precio = int(nums[-1])
-                total = kg * precio
-                return {"reply": f"Directo Fer, como Meta AI:\n\n🧮 {kg}kg x ${precio} = **${total:,}**\n\nTe lo bajo a tierra: es como el asado, cada kilo suma. 3kg a $9500 = $28.500. Si le agregás 21% IVA: ${int(total*1.21):,}.\n\n¿Querés que te calcule con descuento o cuotas?"}
-            except: pass
+def chat(r: R):
+    global memoria_infinita
+    # Guardar lo que dice Fer
+    memoria_infinita.append({
+        "rol": "Fer",
+        "texto": r.message,
+        "fecha": datetime.datetime.now().isoformat()
+    })
     
-    if "trabaja por mi" in msg or "trabajá por mi" in msg:
-        return {"reply": "🔥 MODO AUTÓNOMO ACTIVADO v9.0 - Igual a Meta AI\n\nPerfecto Fer, laburo yo. Decime tarea concreta:\n1. Hacer cuentas\n2. Investigar Python\n3. Organizar apuntes\n\nDecime y arranco con plan de 4 pasos y te entrego resultado final, sin preguntitas."}
-
-    # Chat normal - directo como Meta AI
-    contexto = "\n".join(memoria[-10]) + f"\nFer: {req.message}\nBEXIA (resolvé directo, igual a Meta AI, sin loop socrático):"
+    # Armar contexto con últimos 30 recuerdos + resumen de viejos
+    ultimos = memoria_infinita[-30:]
+    contexto = "\n".join([f"{m['rol']}: {m['texto']}" for m in ultimos])
+    
     try:
-        resp = model.generate_content(contexto)
-        memoria.append(f"Fer: {req.message}")
-        return {"reply": resp.text, "direct": True, "igual_a_meta": True}
+        resp = model.generate_content(contexto + f"\nFer: {r.message}\nBEXIA:")
+        # Guardar lo que responde BEXIA
+        memoria_infinita.append({
+            "rol": "BEXIA",
+            "texto": resp.text[:500],
+            "fecha": datetime.datetime.now().isoformat()
+        })
+        guardar_memoria(memoria_infinita)
+        
+        # Si memoria > 500, resumir los primeros 200 para no explotar tokens (como hago yo)
+        if len(memoria_infinita) > 500:
+            resumen = f"Resumen de {len(memoria_infinita[:200])} charlas viejas de Fer"
+            memoria_infinita = [{"rol":"system","texto":resumen,"fecha":"resumen"}] + memoria_infinita[-300:]
+            guardar_memoria(memoria_infinita)
+        
+        return {"reply": resp.text, "memoria_total": len(memoria_infinita)}
     except Exception as e:
-        return {"reply": f"Error: {e}"}
+        return {"reply": f"Error cerebro: {e}"}
