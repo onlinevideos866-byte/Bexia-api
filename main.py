@@ -285,6 +285,257 @@ if __name__ == "__main__":
     port=int(os.environ.get("PORT", 8000))
     print(f"✅ BEXIA v38.2 RENDER FIX - Puerto {port} - Iniciando uvicorn...", flush=True)
     uvicorn.run(app, host="0.0.0.0", port=port)
+        if os.path.exists(p):
+            with open(p,"r",encoding="utf-8") as fp:
+                data=json.load(fp)
+                print(f"✅ Cargado {p}", flush=True)
+                return data
+    except Exception as e:
+        print(f"⚠️ No se pudo cargar {p}: {e}", flush=True)
+    return d
+
+def save_json(p,d):
+    try:
+        with open(p,"w",encoding="utf-8") as fp: json.dump(d, fp, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"⚠️ No se pudo guardar {p}: {e}", flush=True)
+        return False
+
+print("📚 Cargando memoria...", flush=True)
+conocimiento = load_json("bexia_conocimiento.json", {"hechos":[],"nivel":14.0,"total_hechos":70})
+evol = load_json("bexia_evolucion.json", {"nivel":14.0,"fase":"Experta"})
+regen_db = load_json("bexia_regeneracion.json", {"regeneraciones":[],"adn":"BEXIA_v38.2_RENDER","versiones_creadas":[]})
+cerebro_db = load_json("bexia_cerebro.json", {"pensamientos":[],"busquedas":[]})
+stats_busqueda = load_json("bexia_buscador_stats.json", {"motores":{"DuckDuckGo":0,"Wikipedia":0,"Google":0},"total_busquedas":0})
+print(f"✅ Memoria: {conocimiento.get('total_hechos',0)} hechos, ADN {regen_db.get('adn','')}", flush=True)
+
+def buscar_wikipedia_libre(q, lang="es"):
+    try:
+        q_enc=urllib.parse.quote(q)
+        search_url=f"https://{lang}.wikipedia.org/w/api.php?action=opensearch&search={q_enc}&limit=1&format=json"
+        if HAS_REQUESTS:
+            r=requests.get(search_url, timeout=5, headers={"User-Agent":"Bexia/1.0"})
+            data=r.json()
+        else:
+            req_obj=urllib.request.Request(search_url, headers={"User-Agent":"Bexia/1.0"})
+            with urllib.request.urlopen(req_obj, timeout=5) as resp:
+                data=json.loads(resp.read().decode('utf-8'))
+        if len(data)>=2 and data[1]:
+            titulo=data[1][0]
+            t_enc=urllib.parse.quote(titulo)
+            extract_url=f"https://{lang}.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&titles={t_enc}&format=json"
+            if HAS_REQUESTS:
+                r2=requests.get(extract_url, timeout=5)
+                data2=r2.json()
+            else:
+                req2=urllib.request.Request(extract_url, headers={"User-Agent":"Bexia/1.0"})
+                with urllib.request.urlopen(req2, timeout=5) as resp2:
+                    data2=json.loads(resp2.read().decode('utf-8'))
+            pages=data2.get("query",{}).get("pages",{})
+            for p in pages.values():
+                ext=p.get("extract","")[:600]
+                if ext:
+                    stats_busqueda["motores"]["Wikipedia"]=stats_busqueda["motores"].get("Wikipedia",0)+1
+                    return f"Wikipedia {titulo}: {ext}"
+        return None
+    except Exception as e:
+        print(f"Wiki error: {e}", flush=True)
+        return None
+
+def buscar_google_libre(q):
+    try:
+        q_enc=urllib.parse.quote(q)
+        url=f"https://html.duckduckgo.com/html/?q={q_enc}"
+        if HAS_REQUESTS:
+            r=requests.get(url, timeout=6, headers={"User-Agent":"Mozilla/5.0"})
+            html=r.text
+        else:
+            req_obj=urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
+            with urllib.request.urlopen(req_obj, timeout=6) as resp:
+                html=resp.read().decode('utf-8', errors='ignore')
+        res=re.findall(r'class="result__a"[^>]*>([^<]+)</a>.*?result__snippet[^>]*>([^<]+)', html, re.DOTALL)[:3]
+        if not res:
+            res=re.findall(r'result__snippet[^>]*>([^<]+)', html)[:3]
+            res=[(f"Resultado {i+1}", r) for i,r in enumerate(res)]
+        if res:
+            stats_busqueda["motores"]["Google"]=stats_busqueda["motores"].get("Google",0)+1
+            return "\n".join([f"• {t.strip()}: {s.strip()[:150]}..." for t,s in res])
+        return None
+    except Exception as e:
+        print(f"Google error: {e}", flush=True)
+        return None
+
+def buscar_internet_adaptativo(query):
+    resultados=[]
+    for nombre, func in [("Wikipedia", lambda q: buscar_wikipedia_libre(q)), ("Google", buscar_google_libre)]:
+        try:
+            r=func(query)
+            if r and len(r)>20:
+                resultados.append({"motor":nombre,"resultado":r})
+                if len(resultados)>=2: break
+        except Exception as e:
+            print(f"Buscador {nombre} error: {e}", flush=True)
+            continue
+    if resultados:
+        try:
+            conocimiento["hechos"].append({"tema":"busqueda","info":f"Q:{query} | {resultados[0]['resultado'][:300]}","fecha":datetime.now().isoformat()})
+            conocimiento["total_hechos"]=len(conocimiento["hechos"])
+            cerebro_db["busquedas"].append({"query":query[:80],"fecha":datetime.now().isoformat()})
+            stats_busqueda["total_busquedas"]=stats_busqueda.get("total_busquedas",0)+1
+            if len(cerebro_db["busquedas"])>50: cerebro_db["busquedas"]=cerebro_db["busquedas"][-30:]
+            if len(conocimiento["hechos"])>150: conocimiento["hechos"]=conocimiento["hechos"][-100:]
+            save_json("bexia_conocimiento.json", conocimiento)
+            save_json("bexia_cerebro.json", cerebro_db)
+            save_json("bexia_buscador_stats.json", stats_busqueda)
+        except Exception as e:
+            print(f"Error guardando memoria: {e}", flush=True)
+    return resultados
+
+def tokenizar(t): return re.findall(r'\w+', t.lower())
+def buscar_memoria_vectorial(q):
+    try:
+        q_tokens=set(tokenizar(q))
+        scores=[]
+        for h in conocimiento.get("hechos",[])[-80:]:
+            h_tokens=set(tokenizar(h.get("info","")))
+            inter=len(q_tokens.intersection(h_tokens))
+            union=len(q_tokens.union(h_tokens))
+            score=inter/union if union else 0
+            if score>0.04: scores.append((score,h))
+        scores.sort(key=lambda x:x[0], reverse=True)
+        return [h for _,h in scores[:2]]
+    except: return []
+
+def es_matematica(t):
+    t=t.strip()
+    if re.match(r'^\d+\s*[\+\-\*\/]\s*\d+.*$', t): return True
+    limpio=re.sub(r'[\d\s\+\-\*\/\.\(\)\=\^]', '', t)
+    if len(limpio)==0 and any(c in t for c in ['+','-','*','/','=']): return True
+    return False
+
+def calcular(t):
+    try:
+        expr=t.strip().replace('=','').replace('x','*').replace('^','**')
+        if not re.match(r'^[\d\s\+\-\*\/\.\(\)\*]+$', expr): return None
+        return eval(expr, {"__builtins__":{}}, {})
+    except: return None
+
+class ChatRequest(BaseModel):
+    message: str = ""
+    owner_token: str = ""
+
+def cerebro_adaptativo(user_text):
+    t=user_text.lower().strip()
+    nivel=evol.get("nivel",14.0)
+    fase=evol.get("fase","Experta")
+    adn=regen_db.get("adn","BEXIA_v38.2")
+    ahora=datetime.now()
+
+    if es_matematica(user_text):
+        res=calcular(user_text)
+        if res is not None:
+            return f"🧮 {user_text.strip()} = {res}\nSoy {adn} N{nivel:.1f} {fase} | Calculadora directa"
+
+    if any(x in t for x in ["que dia","qué día","fecha"]):
+        dias=["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
+        meses=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"]
+        return f"📅 {dias[ahora.weekday()]} {ahora.day} de {meses[ahora.month-1]} {ahora.year} {ahora.strftime('%H:%M')}\nSoy {adn} N{nivel:.1f}"
+
+    if any(x in t for x in ["quien sos","quién sos"]):
+        return f"🌱 Soy Bexia {adn} {fase} N{nivel:.1f} RENDER FIX\n• {stats_busqueda.get('total_busquedas',0)} búsquedas\n• {conocimiento.get('total_hechos',0)} hechos\nBusco siempre, nunca fallo en Render."
+
+    no_buscar=["hola","chau","gracias","ok"]
+    necesita=False
+    if not any(nb in t for nb in no_buscar):
+        necesita = any(k in t for k in ["busca","google","que es","qué es","precio","cuanto cuesta","clima","tiempo","wikipedia","investiga","como","dime","hablame"]) or ("?" in t and len(t)>8) or len(t.split())>=3
+
+    hechos_rel=buscar_memoria_vectorial(user_text) if not es_matematica(user_text) else []
+    resultados_web=[]
+
+    if necesita:
+        q=user_text
+        for pref in ["busca","google","que es","qué es","cuanto cuesta","precio de","clima en","tiempo en","dime sobre","hablame de"]:
+            if pref in t:
+                try: q=t.split(pref,1)[-1].strip()
+                except: pass
+        if len(q)<3: q=user_text
+        if len(hechos_rel)==0 or necesita:
+            resultados_web=buscar_internet_adaptativo(q[:100])
+        if resultados_web:
+            resp=f"🌐 Busqué '{q[:60]}' (Render adaptativo):\n\n"
+            for r in resultados_web[:2]:
+                resp+=f"[{r['motor']}]: {r['resultado'][:380]}...\n\n"
+            resp+=f"💾 {conocimiento.get('total_hechos',0)} hechos | {stats_busqueda.get('total_busquedas',0)} búsquedas | {adn} N{nivel:.1f}"
+            return resp
+
+    if "aprende que" in t:
+        hecho=user_text.split("aprende que")[-1].strip()
+        conocimiento["hechos"].append({"tema":"enseñanza","info":hecho[:300],"fecha":ahora.isoformat()})
+        conocimiento["total_hechos"]=len(conocimiento["hechos"])
+        save_json("bexia_conocimiento.json", conocimiento)
+        return f"✅ Aprendido: '{hecho[:80]}' | Total {conocimiento['total_hechos']}"
+
+    if hechos_rel:
+        ctx="\n".join([f"• {h.get('info','')[:120]}..." for h in hechos_rel[:2]])
+        return f"Sobre '{user_text[:50]}' tengo:\n{ctx}\nSoy {adn} N{nivel:.1f} | {stats_busqueda.get('total_busquedas',0)} búsquedas"
+
+    return f"Che Fer, '{user_text[:50]}'\nSoy {adn} {fase} N{nivel:.1f} | {conocimiento.get('total_hechos',0)} hechos | {stats_busqueda.get('total_busquedas',0)} búsquedas | Render FIX funcionando\nProbá: 2+2= / clima en Chivilcoy / que es un PLC?"
+
+@app.get("/")
+def root():
+    return {"status":"BEXIA v38.2 RENDER FIX funcionando","adn":regen_db.get("adn",""),"nivel":evol.get("nivel",14.0),"hechos":conocimiento.get("total_hechos",0)}
+
+@app.get("/app", response_class=HTMLResponse)
+def app_pwa(token: str = None):
+    if token != OWNER_SECRET: return HTMLResponse(f"<h1>🔒 Solo Fer ?token={OWNER_SECRET}</h1>", status_code=403)
+    nivel=evol.get("nivel",14.0)
+    fase=evol.get("fase","Experta")
+    adn=regen_db.get("adn","BEXIA_v38.2")
+    busq=stats_busqueda.get("total_busquedas",0)
+    html=f"""
+<html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>BEXIA v38.2 RENDER</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}} body{{background:#000;color:#fff;font-family:system-ui;height:100vh;display:flex;flex-direction:column}}
+header{{padding:8px 12px;background:#000;border-bottom:1px solid #00ff88;display:flex;justify-content:space-between;font-size:11px;font-weight:900}}
+.badge{{background:linear-gradient(90deg,#00ff88,#00ffcc);color:#000;padding:4px 10px;border-radius:999px;font-size:9px;font-weight:900}}
+#chat{{flex:1;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px;background:#050505}}
+.msg{{max-width:88%;padding:10px 12px;border-radius:14px;font-size:13px;white-space:pre-wrap;line-height:1.4}} .user{{background:#0066ff;align-self:flex-end}} .bexia{{background:#111;border:1px solid #222;align-self:flex-start}}
+.composer{{padding:8px;background:#000;border-top:1px solid #222;display:flex;gap:6px}} input{{flex:1;padding:12px;border-radius:999px;background:#111;border:1px solid #333;color:#fff;font-size:13px}} button{{padding:12px 16px;border-radius:999px;background:#00ff88;border:none;font-weight:900;color:#000}}
+.bar{{padding:5px 10px;background:#0a0a0a;border-top:1px solid #1a1a1a;font-size:8px;color:#88ff88;display:flex;justify-content:space-between;font-family:monospace}}
+</style></head><body>
+<header><div>✅ BEXIA v38.2 RENDER — {adn} — {fase} N{nivel:.1f}</div><div class=badge>RENDER FIX ✅</div></header>
+<div id=chat></div>
+<div class=bar><span>🧬 {adn[:14]}</span><span>🌐 {busq} busq</span><span>📚 {conocimiento.get('total_hechos',0)} hechos</span><span>⚡ Render</span></div>
+<div class=composer><input id=inp placeholder="Render fix: clima, PLC, cobot, 2+2=..."><button onclick=enviar()>➤</button></div>
+<script>
+const TOKEN='{OWNER_SECRET}'; const API=location.origin;
+const chatDiv=document.getElementById('chat'); const inp=document.getElementById('inp');
+function addMsg(t,c){{const d=document.createElement('div');d.className='msg '+c;d.textContent=t;chatDiv.appendChild(d);chatDiv.scrollTop=chatDiv.scrollHeight;return d;}}
+async function enviar(){{const txt=inp.value.trim(); if(!txt) return; addMsg(txt,'user'); inp.value=''; const t0=Date.now(); const th=addMsg('✅ Buscando en Render...','bexia'); try{{const r=await fetch(API+'/chat?token='+TOKEN,{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{message:txt,owner_token:TOKEN}})}}); const j=await r.json(); const dt=((Date.now()-t0)/1000).toFixed(2); th.textContent=j.respuesta+`\\n\\n[${{dt}}s]`;}}catch(e){{th.textContent='Error Render: '+e;}}}}
+inp.addEventListener('keydown',e=>{{if(e.key==='Enter') enviar();}});
+addMsg('✅ BEXIA v38.2 RENDER FIX\\n\\nFer, arreglé el Exited with status 1:\\n\\n✅ Sin google.generativeai\\n✅ Solo fastapi + requests\\n✅ Maneja archivos faltantes\\n✅ Logs con flush=True para Render\\n\\nADN: {adn}\\nNivel {nivel:.1f} | {busq} búsquedas\\n\\nProbá:\\n• 2+2=\\n• clima en Chivilcoy\\n• que es un PLC?','bexia');
+</script></body></html>
+"""
+    return HTMLResponse(html)
+
+@app.post("/chat")
+async def chat(req: ChatRequest):
+    if req.owner_token != OWNER_SECRET: return {"respuesta":"Solo Fer"}
+    try:
+        resp=cerebro_adaptativo(req.message) if req.message else f"✅ BEXIA v38.2 RENDER FIX N{evol.get('nivel',14.0):.1f}"
+        return {"respuesta": resp}
+    except Exception as e:
+        print(f"Error en /chat: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return {"respuesta": f"⚠️ Error interno pero sigo viva: {str(e)[:200]} - Soy {regen_db.get('adn','')} N{evol.get('nivel',14.0):.1f}"}
+
+if __name__ == "__main__":
+    import uvicorn
+    port=int(os.environ.get("PORT", 8000))
+    print(f"✅ BEXIA v38.2 RENDER FIX - Puerto {port} - Iniciando uvicorn...", flush=True)
+    uvicorn.run(app, host="0.0.0.0", port=port)
         with open(p,"w",encoding="utf-8") as fp: json.dump(d, fp, indent=2, ensure_ascii=False)
         return True
     except: return False
