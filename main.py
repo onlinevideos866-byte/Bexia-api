@@ -1,6 +1,6 @@
 
 """
-BEXIA v48 DEFINITIVA - RENDER READY - Testeada con fix lluvia
+BEXIA v48 DEFINITIVA - RENDER READY - Deploy Succeeded 20 Sep 2026
 """
 import os, json, re, time, uuid
 from datetime import datetime
@@ -90,28 +90,28 @@ def buscar_google(q):
 
 def buscar_web_adaptativa(q):
     orden=stats.get("orden",["Wikipedia","Google"])
-    def eff_motor(m):
+    def eff(m):
         d=stats["motores"].get(m,{"ok":0,"fail":0})
         tot=d["ok"]+d["fail"]
         return d["ok"]/tot if tot else 0.5
-    orden_sorted=sorted(orden, key=eff_motor, reverse=True)
+    orden_sorted=sorted(orden, key=eff, reverse=True)
     stats["orden"]=orden_sorted
-    resultados=[]
+    res=[]
     for motor in orden_sorted:
-        func=buscar_wiki if motor=="Wikipedia" else buscar_google
-        res=func(q)
-        if res and len(res)>30:
+        fn=buscar_wiki if motor=="Wikipedia" else buscar_google
+        r=fn(q)
+        if r and len(r)>30:
             stats["motores"].setdefault(motor,{"ok":0,"fail":0})["ok"]+=1
-            resultados.append((motor,res))
-            if len(resultados)>=2: break
+            res.append((motor,r))
+            if len(res)>=2: break
         else:
             stats["motores"].setdefault(motor,{"ok":0,"fail":0})["fail"]+=1
-    if resultados:
+    if res:
         stats["total_busquedas"]=stats.get("total_busquedas",0)+1
         save_json("bexia_buscador_stats.json",stats)
         ajustes["efectividad"]["web"]=ajustes["efectividad"].get("web",0)+1
         save_json("bexia_ajustes.json",ajustes)
-    return resultados
+    return res
 
 def obtener_clima(ciudad="Chivilcoy"):
     try:
