@@ -1,34 +1,34 @@
 """
-BEXIA - Módulo de aprendizaje supervisado
-==========================================
-Flujo:
-  1. Cuando Bexia no puede responder algo bien, lo anota en una cola
-     (bexia_pendientes.json) en vez de inventar una respuesta.
-  2. Vos (el dueño, con OWNER_SECRET) consultás esa cola desde un
-     endpoint protegido.
-  3. Para cada pendiente, Bexia puede PROPONER una entrada de
-     conocimiento o una función nueva — como texto, nunca como código
-     que se ejecuta sola.
-  4. Vos revisás la propuesta y, si te gusta, la aprobás con otro
-     endpoint protegido. Recién ahí se guarda en disco y queda activa.
-
-Nada de esto ejecuta código generado automáticamente. Todo pasa por
-tu aprobación explícita.
+BEXIA - Versión integrada
+- Clima real (Open-Meteo)
+- Búsqueda web real (Wikipedia + Google/DuckDuckGo)
+- Base de conocimiento offline
+- Memoria persistente por usuario (sobrevive reinicios)
+- Aprendizaje supervisado: cola de pendientes -> propuesta -> aprobación manual
 """
-import uuid
+import os, json, re, time, random, uuid
+from datetime import datetime
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+import urllib.request, urllib.parse
+
+try:
+    import requests
+    HAS_REQUESTS = True
+except Exception:
+    HAS_REQUESTS = False
+
+print("🌿 BEXIA iniciando...", flush=True)
+
+OWNER_SECRET = "BEXIA_FER_2026_INFINITA_SUPREMA"  # cambialo por tu propia clave
+app = FastAPI(title="BEXIA", docs_url=None, redoc_url=None, openapi_url=None)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # ============================================================
-# 1. COLA DE PREGUNTAS SIN RESPUESTA
+# UTILIDADES DE ARCHIVO
 # ============================================================
-ARCHIVO_PENDIENTES = "bexia_pendientes.json"
-pendientes = load_json(ARCHIVO_PENDIENTES, {})  # {id: {...}}
-
-def guardar_pendientes():
-    save_json(ARCHIVO_PENDIENTES, pendientes)
-
-def registrar_pendiente(pregunta_original, motivo="sin_respuesta_web"):
-    """Se llama desde cerebro() cuando ni la base offline ni la búsqueda
-    web dieron una respuesta útil."""
-    pid = uuid.uuid4().hex[:8]
-    pendientes[pid] = {
-        "pregunta": pregunta_original,
+def load_json(p, d):
+    try:
+        if os.path.exists(p):
