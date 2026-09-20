@@ -324,31 +324,114 @@ def health(): return {"status":"ok","bexia":"v59","live":True}
 @app.get("/app", response_class=HTMLResponse)
 def app_public():
     return HTMLResponse("""
-<html><head><meta name=viewport content="width=device-width,initial-scale=1"><title>BEXIA v59 MULTI-IA N8N</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{background:#050510;color:#fff;font-family:system-ui;height:100vh;display:flex;flex-direction:column}header{padding:12px;background:linear-gradient(90deg,#000,#7c3aed,#ff6a00,#22c55e,#ec4899);font-weight:900;display:flex;justify-content:space-between}#chat{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px}.msg{max-width:85%;padding:12px 14px;border-radius:18px;font-size:14px;white-space:pre-wrap}.user{background:#7c3aed;align-self:flex-end}.bexia{background:#12122a;border:1px solid #222;align-self:flex-start}.composer{padding:10px;background:#0a0a14;display:flex;gap:8px}input{flex:1;padding:13px;border-radius:999px;background:#12122a;border:1px solid #333;color:#fff}button{padding:13px 20px;border-radius:999px;background:linear-gradient(90deg,#7c3aed,#ff6a00);border:none;color:#fff;font-weight:900}.hint{padding:6px 12px;background:#111;text-align:center;font-size:11px;color:#aaa}</style></head><body>
-<header><div>🌐 BEXIA v59 MULTI-IA + N8N</div><div style="font-size:8px;background:rgba(0,0,0,.4);padding:4px 8px;border-radius:999px">Aprende de otras IAs + n8n - Fix Not Found</div></header>
-<div id=chat style="flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px"></div>
-<div class=hint>🌐 'aprende de Claude que...' | 🔗 'crea un workflow n8n que...' | 💻 'escribe tu codigo que aprenda de otras IAs y n8n' | 📦 'mis workflows' 'mis ias'</div>
-<div style="padding:10px;background:#0a0a14;display:flex;gap:8px"><input id=inp placeholder="Ej: aprende de Claude y ChatGPT para ser mas eficiente"><button onclick=enviar()>></button></div>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BEXIA v59.1 FIX - MULTI-IA N8N</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#050510;color:#fff;font-family:system-ui;height:100vh;display:flex;flex-direction:column}
+header{padding:12px;background:linear-gradient(90deg,#000,#7c3aed,#ff6a00,#22c55e);font-weight:900;display:flex;justify-content:space-between;align-items:center}
+#chat{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:#050510}
+.msg{max-width:85%;padding:12px 14px;border-radius:18px;font-size:14px;white-space:pre-wrap;word-break:break-word;line-height:1.4}
+.user{background:#7c3aed;align-self:flex-end;color:#fff}
+.bexia{background:#12122a;border:1px solid #333;align-self:flex-start;color:#fff}
+.composer{padding:10px;background:#0a0a14;display:flex;gap:8px;align-items:center}
+input{flex:1;padding:14px 16px;border-radius:999px;background:#1a1a2e;border:1px solid #444;color:#fff;font-size:16px;outline:none}
+input:focus{border-color:#7c3aed}
+button{padding:14px 22px;border-radius:999px;background:linear-gradient(90deg,#7c3aed,#ff6a00);border:none;color:#fff;font-weight:900;font-size:16px;cursor:pointer;min-width:60px}
+.hint{padding:8px 12px;background:#111;text-align:center;font-size:11px;color:#aaa;border-top:1px solid #222}
+.status{padding:4px 12px;background:#000;text-align:center;font-size:10px;color:#22c55e}
+</style></head><body>
+<header><div>🌐 BEXIA v59.1 MULTI-IA + N8N FIX</div><div style="font-size:10px;background:rgba(0,0,0,.5);padding:4px 8px;border-radius:999px">Fix No Anda - Aprende + n8n</div></header>
+<div class=status id=status>✅ Conectado - Listo para aprender de otras IAs + n8n</div>
+<div id=chat></div>
+<div class=hint>🌐 'aprende de Claude que...' | 🔗 'crea un workflow n8n que...' | 💻 'escribe tu codigo que aprenda de otras IAs y n8n' | 📦 'mis workflows' 'mis ias' 'mis codigos'</div>
+<div class=composer><input id=inp type="text" placeholder="Ej: aprende de Claude que organice mis tareas" autocomplete="off"><button id=btnSend onclick="enviar()">></button></div>
 <script>
+console.log("BEXIA v59.1 FIX iniciando");
 const sid='u'+Math.random().toString(36).slice(2,9);
-const chat=document.getElementById('chat');
-const inp=document.getElementById('inp');
-function add(t,c){const d=document.createElement('div');d.className='msg '+c;d.textContent=t;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
-async function enviar(){
- const txt=inp.value.trim();
- if(!txt) return;
- add(txt,'user');
- inp.value='';
- const th=add('🌐 Aprendendo de otras IAs y n8n para crecer...','bexia');
- try{
-  const r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:txt,session_id:sid})});
-  const j=await r.json();
-  th.textContent=j.respuesta;
- }catch(e){th.textContent='Error '+e}
+const chatEl=document.getElementById('chat');
+const inpEl=document.getElementById('inp');
+const statusEl=document.getElementById('status');
+
+function addMsg(text, cls){
+  try{
+    const d=document.createElement('div');
+    d.className='msg '+cls;
+    d.textContent=text;
+    chatEl.appendChild(d);
+    chatEl.scrollTop=chatEl.scrollHeight;
+    console.log("Mensaje agregado:", cls, text.substring(0,50));
+    return d;
+  }catch(e){
+    console.error("Error addMsg:", e);
+    statusEl.textContent="Error: "+e;
+  }
 }
-inp.addEventListener('keydown',e=>{if(e.key==='Enter')enviar();});
-add("Hola Fer! Soy Bexia v59 MULTI-IA + N8N 🌐\n\nAhora puedo:\n\n🌐 Aprender de otras IAs: Claude, ChatGPT, Gemini, Grok, Perplexity\n🔗 Crear workflows n8n para automatizar y crecer\n💻 Escribir mi propio codigo que aprende de otras IAs + n8n\n\nFix Not Found aplicado - / siempre funciona.\n\nProba:\n• 'aprende de Claude que organice mis tareas'\n• 'crea un workflow n8n que aprenda de ChatGPT'\n• 'escribe tu codigo que aprenda de otras IAs y n8n'","bexia");
+
+async function enviar(){
+  const txt=inpEl.value.trim();
+  if(!txt) return;
+  addMsg(txt,'user');
+  inpEl.value='';
+  const thinking=addMsg('🌐 Aprendendo de otras IAs y n8n para crecer...','bexia');
+  statusEl.textContent="⏳ Enviando a Bexia v59.1...";
+  try{
+    const resp=await fetch('/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:txt,session_id:sid})
+    });
+    console.log("Respuesta status:", resp.status);
+    if(!resp.ok) throw new Error("HTTP "+resp.status);
+    const data=await resp.json();
+    console.log("Respuesta data:", data);
+    thinking.textContent=data.respuesta || "Sin respuesta";
+    statusEl.textContent="✅ Respuesta recibida - Multi-IA + n8n";
+  }catch(e){
+    console.error("Error fetch:", e);
+    thinking.textContent='❌ Error: '+e.message+'
+
+Probá recargar la pagina. Si sigue, andá a /health para ver si está viva: https://bexia-api.onrender.com/health';
+    statusEl.textContent="❌ Error conexion: "+e.message;
+  }
+}
+
+document.getElementById('btnSend').addEventListener('click', enviar);
+inpEl.addEventListener('keydown', function(e){ if(e.key==='Enter'){ enviar(); } });
+
+// Mensaje inicial - con try catch para que siempre aparezca
+window.addEventListener('load', function(){
+  console.log("Window load - agregando mensaje inicial");
+  setTimeout(function(){
+    addMsg("Hola Fer! Soy Bexia v59.1 FIX MULTI-IA + N8N 🌐
+
+✅ FIX 'No Anda' aplicado - Ahora el chat siempre aparece
+
+Ahora puedo:
+🌐 Aprender de otras IAs: Claude, ChatGPT, Gemini, Grok, Perplexity
+🔗 Crear workflows n8n para automatizar y crecer
+💻 Escribir mi propio codigo que aprende de otras IAs + n8n
+
+Todo 100% gratis, legal.
+
+Proba:
+• aprende de Claude que organice mis tareas
+• crea un workflow n8n que aprenda de ChatGPT
+• escribe tu codigo que aprenda de otras IAs y n8n
+• mis workflows
+• mis ias","bexia");
+    statusEl.textContent="✅ Bexia v59.1 lista - Fix No Anda aplicado";
+  }, 100);
+});
+
+// Fallback por si window.load no dispara
+setTimeout(function(){
+  if(chatEl.children.length===0){
+    console.log("Fallback - chat vacio, agregando mensaje");
+    addMsg("Hola Fer! Soy Bexia v59.1 FIX - Si ves esto, el fix funciono!
+
+Deci: aprende de Claude que...","bexia");
+  }
+}, 1000);
 </script>
 </body></html>
 """)
