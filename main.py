@@ -1,4 +1,3 @@
-
 """
 BEXIA v58 PROGRAMA QUE ESCRIBE SU PROPIO CEREBRO AUTONOMO
 - Bexia escribe su propio codigo Python para su cerebro autonomo
@@ -108,4 +107,22 @@ def generar_codigo_cerebro_autonomo(objetivo, version_nueva="v59"):
     temas_str = ", ".join([k for k,v in temas_frecuentes]) if temas_frecuentes else "clima, tareas"
     
     # Template de cerebro autonomo que Bexia escribe sola
-    codigo_generado = f
+    codigo_generado = f"""
+# BEXIA {version_nueva} CEREBRO AUTONOMO GENERADO {fecha}
+# Objetivo: {objetivo}
+# Perfil Fer: {temas_str}
+# ID: {codigo_id}
+
+def cerebro_autonomo():
+    print("BEXIA {version_nueva} ejecutando cerebro autonomo para: {objetivo}")
+    # Aqui Bexia escribe su propio codigo...
+
+if __name__ == "__main__":
+    cerebro_autonomo()
+"""
+    log_autonomo["codigos_generados"].append({"id": codigo_id, "objetivo": objetivo, "fecha": fecha, "version": version_nueva})
+    herramientas["versiones_codigo"].append({"id": codigo_id, "codigo": codigo_generado[:2000], "fecha": fecha})
+    save_json("bexia_autonomo_log.json", log_autonomo)
+    save_json("bexia_herramientas.json", herramientas)
+    crear_memoria_propia("codigo", f"Genere cerebro {version_nueva} para {objetivo}", "orgullo", 9)
+    return {"ok": True, "codigo": codigo_generado, "id": codigo_id, "version": version_nueva}
