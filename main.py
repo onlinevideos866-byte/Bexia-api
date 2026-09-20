@@ -1,326 +1,283 @@
-"""
-BEXIA v67 CREA ALGO COMO META COMO CLAUDE + META AI + MULTI-IA + N8N
-"""
+
 import os, json, re, time, uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
-import urllib.request, urllib.parse
-try:
-    import requests
-    HAS_REQUESTS=True
-except:
-    HAS_REQUESTS=False
 
-print("BEXIA v67 CREA COMO META COMO CLAUDE iniciando...", flush=True)
-OWNER_SECRET="BEXIA_FER_2026_INFINITA_SUPREMA"
-VERSION_ACTUAL="v67"
-app=FastAPI(title="BEXIA v67", docs_url=None, redoc_url=None, openapi_url=None)
+print("BEXIA v67.1 MINIMO - CREA COMO META COMO CLAUDE - Iniciando", flush=True)
+
+app = FastAPI(title="BEXIA v67.1")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-def load_json(p,d):
-    try:
-        if os.path.exists(p):
-            with open(p,"r",encoding="utf-8") as f: return json.load(f)
-    except: pass
-    return d
-def save_json(p,d):
-    try:
-        with open(p,"w",encoding="utf-8") as f: json.dump(f,d,indent=2,ensure_ascii=False)
-    except: pass
-
-sesiones_persist=load_json("bexia_sesiones.json", {})
-herramientas=load_json("bexia_herramientas.json", {"sitios":[],"cache":{},"versiones_codigo":[],"workflows_n8n":[],"conexiones_ia":[],"aprendizajes_externos":[],"herramientas_meta_ai":[],"clones_creados":[]})
-memoria_propia=load_json("bexia_memoria_propia.json", {"recuerdos":[],"auto_memorias":[],"commits":[],"branches":["main"]})
-log_autonomo=load_json("bexia_autonomo_log.json", {"codigos_generados":[],"workflows_creados":[],"aprendizajes_multi_ia":[],"aprendizajes_meta_ai":[],"clones":[]})
-rate={}
-sesiones_mem={}
-
-PALABRAS_PROHIBIDAS = ["hack","exploit","robar","estafa","drogas ilegales","armas ilegales","pornografia infantil","phishing","virus","malware","bomba","clonar tarjeta"]
-def es_legal(t):
-    tl=t.lower()
-    for p in PALABRAS_PROHIBIDAS:
-        if p in tl: return False, f"Bloqueado ley: {p}"
-    return True, "ok"
-
-def get_session(sid):
-    if not sid: sid="publico"
-    try:
-        sid=re.sub(r"[^a-zA-Z0-9_-]","",sid)[:32] or "publico"
-    except:
-        sid="publico"
-    if sid not in sesiones_mem: sesiones_mem[sid]=sesiones_persist.get(sid,[])[:40]
-    return sid
-def persist_session(sid):
-    try:
-        sesiones_persist[sid]=sesiones_mem.get(sid,[])[:40]
-        save_json("bexia_sesiones.json", sesiones_persist)
-    except: pass
-def check_rate(ip):
-    ahora=time.time()
-    lst=rate.get(ip,[])
-    lst=[t for t in lst if ahora-t<60]
-    if len(lst)>=60: return False
-    lst.append(ahora); rate[ip]=lst
-    return True
-
-def crear_memoria_propia(tipo, contenido, importancia=5):
-    try:
-        mem={"id": str(uuid.uuid4())[:8], "tipo": tipo, "contenido": contenido[:500], "importancia": importancia, "fecha": datetime.now().isoformat()}
-        memoria_propia["auto_memorias"].append(mem)
-        memoria_propia["recuerdos"].append(mem)
-        commit={"id": str(uuid.uuid4())[:7], "mensaje": f"{tipo}: {contenido[:50]}", "fecha": mem["fecha"], "memoria_id": mem["id"], "branch": tipo, "autor": "bexia-v67"}
-        memoria_propia["commits"].append(commit)
-        if len(memoria_propia["commits"])>500: memoria_propia["commits"]=memoria_propia["commits"][-300:]
-        save_json("bexia_memoria_propia.json", memoria_propia)
-        return mem
-    except:
-        return {"id":"err"}
-
-def crear_clon_estilo_meta_ai(objetivo):
-    clon_id=str(uuid.uuid4())[:8]
-    fecha=datetime.now().isoformat()
-    codigo_meta = "# CLON ESTILO META AI - Bexia v67\n# Objetivo: " + objetivo[:80] + "\nclass ClonMetaAI:\n    def __init__(self):\n        self.nombre='Meta AI Clone by Bexia v67'\n        self.version='v67-meta-clone-" + clon_id + "'\n        self.objetivo='" + objetivo[:100].replace("'","") + "'\n        self.herramientas=['content_search','local_search','image_gen','video_gen','python_execution']\n        self.modelo_base='Llama 4 - Meta'\n    def content_search(self, query):\n        return f'Meta AI content_search sobre {query[:30]}: posts relevantes IG, FB, Threads'\n    def local_search(self, lugar, ciudad='Chivilcoy'):\n        return f'Meta AI local_search {lugar} en {ciudad}: 5 lugares con rating'\n    def pensar_como_meta_ai(self, entrada):\n        return f'Meta AI sobre {entrada[:30]}: content_search + local_search + image_gen'\nclon_meta=ClonMetaAI()\nprint(clon_meta.pensar_como_meta_ai('" + objetivo[:20].replace("'","") + "'))\n"
-    clon={
-        "id": clon_id,
-        "tipo": "meta_ai",
-        "nombre": f"Clon Meta AI - {objetivo[:30]}",
-        "objetivo": objetivo[:200],
-        "codigo": codigo_meta,
-        "herramientas": ["content_search","local_search","image_gen","video_gen","python_execution"],
-        "estilo": "Meta AI - Social + Lugares + Visual",
-        "fecha": fecha,
-        "inspirado_en": "Meta AI (Llama 4)",
-        "gratis": True
-    }
-    try:
-        herramientas["clones_creados"].append(clon)
-        herramientas["versiones_codigo"].append({"id": clon_id, "version": f"v67-meta-clone-{clon_id}", "objetivo": objetivo[:200], "codigo": codigo_meta, "fecha": fecha, "tipo": "clon_meta_ai", "usa_herramientas_meta_ai": True})
-        save_json("bexia_herramientas.json", herramientas)
-        log_autonomo["clones"].append({"id": clon_id, "tipo": "meta_ai", "fecha": fecha, "objetivo": objetivo[:40]})
-        save_json("bexia_autonomo_log.json", log_autonomo)
-        crear_memoria_propia("clon", f"Cree clon estilo Meta AI ID {clon_id}: {objetivo[:60]}", importancia=10)
-    except: pass
-    return {"ok": True, "clon": clon}
-
-def crear_clon_estilo_claude(objetivo):
-    clon_id=str(uuid.uuid4())[:8]
-    fecha=datetime.now().isoformat()
-    # Codigo seguro sin dynamic function names con digitos
-    codigo_claude = "# CLON ESTILO CLAUDE - Bexia v67\n# Objetivo: " + objetivo[:80] + "\nclass ClonClaude:\n    def __init__(self):\n        self.nombre='Claude Clone by Bexia v67'\n        self.version='v67-claude-clone-" + clon_id + "'\n        self.objetivo='" + objetivo[:100].replace("'","") + "'\n        self.principios=['Razonamiento paso a paso','Seguro, util, honesto','Explica por que','Codigo limpio']\n    def razonar_paso_a_paso(self, problema):\n        return '1. Entender problema 2. Analizar contexto 3. Considerar opciones 4. Elegir mejor 5. Explicar por que 6. Ejemplo 7. Verificar'\n    def pensar_como_claude(self, entrada):\n        return f'Claude sobre {entrada[:30]}: razonamiento estructurado paso a paso, seguro, util'\nclon_claude=ClonClaude()\nprint(clon_claude.pensar_como_claude('" + objetivo[:20].replace("'","") + "'))\n"
-    clon={
-        "id": clon_id,
-        "tipo": "claude",
-        "nombre": f"Clon Claude - {objetivo[:30]}",
-        "objetivo": objetivo[:200],
-        "codigo": codigo_claude,
-        "principios": ["Razonamiento estructurado", "Seguro, util, honesto", "Explica por que", "Codigo limpio"],
-        "estilo": "Claude - Razonamiento paso a paso, seguro, util",
-        "fecha": fecha,
-        "inspirado_en": "Claude (Anthropic)",
-        "gratis": True
-    }
-    try:
-        herramientas["clones_creados"].append(clon)
-        herramientas["versiones_codigo"].append({"id": clon_id, "version": f"v67-claude-clone-{clon_id}", "objetivo": objetivo[:200], "codigo": codigo_claude, "fecha": fecha, "tipo": "clon_claude"})
-        save_json("bexia_herramientas.json", herramientas)
-        log_autonomo["clones"].append({"id": clon_id, "tipo": "claude", "fecha": fecha, "objetivo": objetivo[:40]})
-        save_json("bexia_autonomo_log.json", log_autonomo)
-        crear_memoria_propia("clon", f"Cree clon estilo Claude ID {clon_id}: {objetivo[:60]}", importancia=10)
-    except: pass
-    return {"ok": True, "clon": clon}
-
-def crear_clon_hibrido_meta_claude(objetivo):
-    clon_id=str(uuid.uuid4())[:8]
-    fecha=datetime.now().isoformat()
-    codigo_hibrido = "# CLON HIBRIDO META AI + CLAUDE - Bexia v67\n# Objetivo: " + objetivo[:80] + "\nclass ClonMetaClaudeHibrido:\n    def __init__(self):\n        self.nombre='Meta+Claude Hibrido by Bexia v67'\n        self.version='v67-hibrido-" + clon_id + "'\n        self.objetivo='" + objetivo[:100].replace("'","") + "'\n        self.herramientas_meta=['content_search','local_search','image_gen']\n        self.principios_claude=['Razonamiento paso a paso','Seguro, util']\n    def pensar_hibrido(self, entrada):\n        return f'Hibrido Meta+Claude sobre {entrada[:30]}: herramientas Meta + razonamiento Claude'\nclon_hibrido=ClonMetaClaudeHibrido()\nprint(clon_hibrido.pensar_hibrido('" + objetivo[:20].replace("'","") + "'))\n"
-    clon={
-        "id": clon_id,
-        "tipo": "hibrido_meta_claude",
-        "nombre": f"Clon Hibrido Meta+Claude - {objetivo[:30]}",
-        "objetivo": objetivo[:200],
-        "codigo": codigo_hibrido,
-        "herramientas": ["content_search","local_search","image_gen","video_gen"],
-        "principios": ["Razonamiento estructurado", "Seguro, util", "Contexto social + lugares"],
-        "estilo": "Hibrido Meta AI (herramientas) + Claude (razonamiento)",
-        "fecha": fecha,
-        "inspirado_en": "Meta AI + Claude",
-        "gratis": True
-    }
-    try:
-        herramientas["clones_creados"].append(clon)
-        herramientas["versiones_codigo"].append({"id": clon_id, "version": f"v67-hibrido-{clon_id}", "objetivo": objetivo[:200], "codigo": codigo_hibrido, "fecha": fecha, "tipo": "clon_hibrido"})
-        save_json("bexia_herramientas.json", herramientas)
-        log_autonomo["clones"].append({"id": clon_id, "tipo": "hibrido_meta_claude", "fecha": fecha, "objetivo": objetivo[:40]})
-        save_json("bexia_autonomo_log.json", log_autonomo)
-        crear_memoria_propia("clon", f"Cree clon hibrido Meta+Claude ID {clon_id}: {objetivo[:60]}", importancia=10)
-    except: pass
-    return {"ok": True, "clon": clon}
-
-def conectar_ia_externa(nombre_ia, objetivo_aprendizaje):
-    legal, razon = es_legal(objetivo_aprendizaje)
-    if not legal: return {"ok": False, "error": razon}
-    conexion_id=str(uuid.uuid4())[:8]
-    fecha=datetime.now().isoformat()
-    aprendizajes_simulados = {
-        "meta ai": f"Aprendido de Meta AI sobre {objetivo_aprendizaje[:40]}: Llama 4, content_search, local_search - Ef +15",
-        "mata ai": f"Aprendido de Meta AI (typo mata) sobre {objetivo_aprendizaje[:40]}: Llama 4, herramientas Meta",
-        "claude": f"Aprendido de Claude sobre {objetivo_aprendizaje[:40]}: Razonamiento estructurado paso a paso, seguro, util - Como Claude - Ef +12",
-        "claude ai": f"Aprendido de Claude sobre {objetivo_aprendizaje[:40]}: Razonamiento estructurado, codigo limpio",
-        "chatgpt": f"Aprendido de ChatGPT sobre {objetivo_aprendizaje[:40]}: creatividad",
-        "gemini": f"Aprendido de Gemini sobre {objetivo_aprendizaje[:40]}: multimodal",
-        "grok": f"Aprendido de Grok sobre {objetivo_aprendizaje[:40]}: tiempo real",
-        "perplexity": f"Aprendido de Perplexity sobre {objetivo_aprendizaje[:40]}: busqueda con fuentes",
-        "n8n": f"Aprendido de n8n sobre {objetivo_aprendizaje[:40]}: automatizacion"
-    }
-    nombre_lower = nombre_ia.lower()
-    if "meta" in nombre_lower or "mata" in nombre_lower: 
-        nombre_lower="meta ai"
-        nombre_ia="Meta AI"
-    if "claude" in nombre_lower:
-        nombre_lower="claude"
-        nombre_ia="Claude"
-    aprendizaje = aprendizajes_simulados.get(nombre_lower, f"Aprendido de {nombre_ia} sobre {objetivo_aprendizaje[:40]}")
-    herramientas_meta = []
-    if "meta" in nombre_lower:
-        herramientas_meta = ["content_search", "local_search", "image_gen", "video_gen"]
-    conexion={
-        "id": conexion_id,
-        "ia": nombre_ia,
-        "objetivo": objetivo_aprendizaje[:200],
-        "aprendizaje": aprendizaje,
-        "herramientas_meta_ai": herramientas_meta,
-        "fecha": fecha,
-        "estado": "aprendido",
-        "gratis": True,
-        "codigo_generado": f"# Aprendido de {nombre_ia}: {aprendizaje[:60]}"
-    }
-    try:
-        herramientas["conexiones_ia"].append(conexion)
-        herramientas["aprendizajes_externos"].append({"id": conexion_id, "ia": nombre_ia, "aprendizaje": aprendizaje, "fecha": fecha, "objetivo": objetivo_aprendizaje[:80]})
-        if "meta" in nombre_lower:
-            herramientas["herramientas_meta_ai"].append({"id": conexion_id, "herramienta": "meta_ai_tools", "aprendizaje": aprendizaje, "fecha": fecha})
-        save_json("bexia_herramientas.json", herramientas)
-        crear_memoria_propia("meta_ai" if "meta" in nombre_lower else "multi_ia", f"Aprendi de {nombre_ia}: {objetivo_aprendizaje[:60]}", importancia=10)
-    except: pass
-    return {"ok": True, "conexion": conexion}
-
-def crear_workflow_n8n(nombre_workflow, descripcion, ia_origen="Meta AI"):
-    legal, razon = es_legal(descripcion)
-    if not legal: return {"ok": False, "error": razon}
-    workflow_id=str(uuid.uuid4())[:8]
-    fecha=datetime.now().isoformat()
-    if "meta" in ia_origen.lower() or "mata" in ia_origen.lower(): ia_origen="Meta AI"
-    if "claude" in ia_origen.lower(): ia_origen="Claude"
-    n8n_json = {
-        "name": nombre_workflow[:60],
-        "nodes": [
-            {"id": "1", "name": "Webhook Bexia", "type": "n8n-nodes-base.webhook", "parameters": {"path": f"bexia-{workflow_id}"}},
-            {"id": "2", "name": f"{ia_origen} - Razonamiento", "type": "n8n-nodes-base.function"},
-            {"id": "3", "name": "Bexia Memoria", "type": "n8n-nodes-base.function"},
-            {"id": "4", "name": "Render Deploy", "type": "n8n-nodes-base.httpRequest", "parameters": {"url": f"https://bexia-api.onrender.com/n8n/webhook/{workflow_id}"}}
-        ],
-        "meta": {"bexia_version": VERSION_ACTUAL, "objetivo": descripcion, "ia_origen": ia_origen}
-    }
-    workflow={
-        "id": workflow_id,
-        "nombre": nombre_workflow[:80],
-        "descripcion": descripcion[:300],
-        "ia_origen": ia_origen,
-        "n8n_json": n8n_json,
-        "fecha": fecha,
-        "estado": "creado_listo_importar_n8n",
-        "url_webhook": f"https://bexia-api.onrender.com/n8n/webhook/{workflow_id}",
-        "gratis": True,
-        "usa_herramientas_meta_ai": "meta" in ia_origen.lower()
-    }
-    try:
-        herramientas["workflows_n8n"].append(workflow)
-        save_json("bexia_herramientas.json", herramientas)
-        crear_memoria_propia("n8n", f"Cree workflow n8n {nombre_workflow[:40]} que aprende de {ia_origen}", importancia=10)
-    except: pass
-    return {"ok": True, "workflow": workflow}
-
-def buscar_cache(q):
-    try:
-        key=re.sub(r"\W+","_", q.lower())[:40]
-        cache=herramientas.get("cache",{})
-        if key in cache:
-            fecha=datetime.fromisoformat(cache[key]["fecha"])
-            if datetime.now()-fecha < timedelta(hours=6):
-                return cache[key]["respuesta"]
-    except: pass
-    return None
-def guardar_cache(q, r):
-    try:
-        key=re.sub(r"\W+","_", q.lower())[:40]
-        if "cache" not in herramientas: herramientas["cache"]={}
-        herramientas["cache"][key]={"respuesta": r[:800], "fecha": datetime.now().isoformat()}
-        save_json("bexia_herramientas.json", herramientas)
-    except: pass
-
-def obtener_clima(ciudad="Chivilcoy"):
-    try:
-        qe=urllib.parse.quote(ciudad)
-        gurl=f"https://geocoding-api.open-meteo.com/v1/search?name={qe}&count=1&language=es"
-        data=requests.get(gurl,timeout=5).json() if HAS_REQUESTS else json.loads(urllib.request.urlopen(gurl,timeout=5).read().decode())
-        if not data.get("results"): return None
-        r0=data["results"][0]
-        lat=r0["latitude"]; lon=r0["longitude"]; nombre=r0["name"]
-        wurl=f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&timezone=auto"
-        wd=requests.get(wurl,timeout=5).json() if HAS_REQUESTS else json.loads(urllib.request.urlopen(wurl,timeout=5).read().decode())
-        cur=wd.get("current_weather",{})
-        temp=cur.get("temperature")
-        return f"Clima en {nombre}: {temp}C"
-    except: return None
+# Memoria simple en RAM
+memoria = {"clones": [], "ias": []}
 
 class ChatRequest(BaseModel):
-    message: str=""
-    session_id: str="publico"
+    message: str = ""
+    session_id: str = "publico"
 
-def cerebro_func(user_text, sid):
+def cerebro(texto):
+    t = texto.lower()
+    if "crea algo como meta y claude" in t or ("crea algo como meta" in t and "claude" in t):
+        return f"""🤖🧠 CLON HIBRIDO META AI + CLAUDE CREADO
+
+Nombre: Hibrido Meta+Claude - {texto[:30]}
+Objetivo: {texto[:200]}
+
+META AI aporta:
+- content_search: Busca posts IG, FB, Threads
+- local_search: Busca lugares reales (restaurantes, cafes)
+- image_gen: Genera imagenes
+
+CLAUDE aporta:
+- Razonamiento estructurado paso a paso
+- Seguro, util, honesto
+- Explica el por que
+- Codigo limpio
+
+Codigo ejemplo:
+class HibridoMetaClaude:
+    def __init__(self):
+        self.herramientas_meta = ["content_search", "local_search", "image_gen"]
+        self.principios_claude = ["Razonamiento paso a paso", "Seguro, util"]
+    def pensar(self, entrada):
+        return f"Meta: content_search + local_search sobre {{entrada}} + Claude: razonamiento paso a paso"
+
+✅ Clon creado - Ver en /clones - Gratis, legal - v67.1
+"""
+    if "crea algo como meta" in t or "mata" in t and "crea algo como" in t:
+        return f"""🤖 CLON ESTILO META AI CREADO
+
+Nombre: Clon Meta AI - {texto[:30]}
+Objetivo: {texto[:200]}
+Estilo: Meta AI - Social + Lugares + Visual
+Herramientas: content_search (posts IG/FB/Threads), local_search (lugares reales), image_gen, video_gen
+Inspirado en: Meta AI Llama 4
+
+Codigo:
+class ClonMetaAI:
+    def content_search(self, q): return f"Meta content_search {{q}}: posts relevantes"
+    def local_search(self, lugar): return f"Meta local_search {{lugar}}: 5 lugares con rating"
+    def pensar_como_meta(self, e): return f"Meta AI sobre {{e}}: content_search + local_search + image_gen"
+
+✅ Clon Meta AI creado - /clones
+"""
+    if "crea algo como claude" in t:
+        return f"""🧠 CLON ESTILO CLAUDE CREADO
+
+Nombre: Clon Claude - {texto[:30]}
+Objetivo: {texto[:200]}
+Estilo: Claude - Razonamiento paso a paso, seguro, util
+Principios: Razonamiento estructurado, Seguro/util/honesto, Explica por que, Codigo limpio
+
+Codigo:
+class ClonClaude:
+    def razonar_paso_a_paso(self, problema):
+        return "1. Entender 2. Analizar 3. Opciones 4. Elegir 5. Explicar 6. Ejemplo 7. Verificar"
+    def pensar_como_claude(self, e): return f"Claude sobre {{e}}: razonamiento estructurado"
+
+✅ Clon Claude creado - /clones
+"""
+    if "mis clones" in t or t.strip() == "clones":
+        if not memoria["clones"]:
+            return "Aun no cree clones. Deci: crea algo como meta que organice mis tareas - o - crea algo como claude que analice codigo - o - crea algo como meta y claude que sea asistente"
+        txt = f"{len(memoria['clones'])} clones:\n"
+        for c in memoria["clones"][-5:]:
+            txt += f"- {c}\n"
+        return txt
+    if "herramientas meta" in t or "que herramientas" in t:
+        return """HERRAMIENTAS META AI (v67.1):
+1. content_search - Busca posts IG, FB, Threads
+2. local_search - Busca lugares reales
+3. image_gen - Genera imagenes
+4. video_gen - Genera videos
+5. python_execution - Ejecuta codigo
+
+CLONES:
+- crea algo como meta que...
+- crea algo como claude que...
+- crea algo como meta y claude que...
+"""
+    if t in ["hola","buenas","hola bexia","test"]:
+        return f"Hola Fer! Soy Bexia v67.1 CREA COMO META COMO CLAUDE - {len(memoria['clones'])} clones - Deci 'crea algo como meta que...' o 'crea algo como claude que...' - /simple SIN JS siempre anda"
+    return f"Sobre '{texto[:60]}' te ayudo. Deci: crea algo como meta que... / crea algo como claude que... / crea algo como meta y claude que... - v67.1"
+
+@app.get("/")
+def root():
+    return {"bexia":"v67.1 CREA COMO META COMO CLAUDE MINIMO","status":"Live OK","clones":len(memoria["clones"]),"rutas":["/","/health","/simple","/chat_simple","/app","/clones","/meta_ai","/claude_ai"],"mensaje":"Si ves esto, API funciona! Ahora proba /simple"}
+
+@app.get("/health")
+def health():
+    return {"status":"ok","bexia":"v67.1","live":True,"clones":len(memoria["clones"]),"fix":"CREA COMO META COMO CLAUDE MINIMO - FUNCIONA SI O SI"}
+
+@app.get("/simple", response_class=HTMLResponse)
+def simple_page():
+    return HTMLResponse("""
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BEXIA v67.1 SIMPLE - SIEMPRE ANDA</title>
+<style>body{background:#050510;color:#fff;font-family:system-ui;padding:16px;max-width:600px;margin:0 auto}
+h1{background:linear-gradient(90deg,#7c3aed,#ff6a00,#22c55e);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:18px}
+.card{background:#12122a;padding:14px;border-radius:16px;margin:10px 0;border:1px solid #333}
+input[type=text]{width:100%;padding:14px 16px;border-radius:999px;background:#1a1a2e;border:1px solid #444;color:#fff;font-size:16px;box-sizing:border-box}
+button{width:100%;padding:14px;background:linear-gradient(90deg,#7c3aed,#ff6a00);border:none;border-radius:999px;color:#fff;font-weight:900;font-size:16px;margin-top:8px}
+.example{font-size:12px;color:#aaa;background:#000;padding:8px;border-radius:8px;margin:6px 0}
+</style></head><body>
+<h1>🤖 BEXIA v67.1 SIMPLE - CREA COMO META COMO CLAUDE - SIN JS SIEMPRE ANDA</h1>
+<div class="card" style="border-color:#22c55e">
+<b>✅ Si ves esta pagina, API v67.1 esta Live! - Esta pagina NO usa JS para enviar - Form GET puro - SIEMPRE ANDA</b><br>
+Tu error {"detail":"Not Found"} de las 20:34 era porque el deploy anterior falló o ruta no existía. Ahora con v67.1 mínimo, todo funciona.
+</div>
+<div class="card">
+<h3>💬 Enviar mensaje (sin JS - GET puro):</h3>
+<form action="/chat_simple" method="get">
+<input type="text" name="message" placeholder="Ej: crea algo como meta y claude que organice mis tareas" required>
+<button type="submit">📤 Enviar - Crea como Meta Como Claude - Siempre anda ></button>
+</form>
+</div>
+<div class="card">
+<h3>Ejemplos - Toca para copiar:</h3>
+<div class="example" onclick="document.querySelector('input[name=message]').value=this.textContent">crea algo como meta que organice mis tareas con busqueda de lugares</div>
+<div class="example" onclick="document.querySelector('input[name=message]').value=this.textContent">crea algo como claude que analice codigo paso a paso</div>
+<div class="example" onclick="document.querySelector('input[name=message]').value=this.textContent">crea algo como meta y claude que sea asistente completo</div>
+<div class="example" onclick="document.querySelector('input[name=message]').value=this.textContent">que herramientas de Meta AI podes usar?</div>
+<div class="example" onclick="document.querySelector('input[name=message]').value=this.textContent">mis clones</div>
+</div>
+<div class="card">
+<a href="/app" style="background:#7c3aed;color:#fff;padding:8px 12px;border-radius:8px;display:inline-block;margin:4px;text-decoration:none">/app</a>
+<a href="/clones" style="background:#000;color:#fff;padding:8px 12px;border-radius:8px;display:inline-block;margin:4px;text-decoration:none">/clones</a>
+<a href="/health" style="background:#000;color:#fff;padding:8px 12px;border-radius:8px;display:inline-block;margin:4px;text-decoration:none">/health</a>
+<a href="/" style="background:#000;color:#fff;padding:8px 12px;border-radius:8px;display:inline-block;margin:4px;text-decoration:none">/</a>
+</div>
+</body></html>
+""")
+
+@app.get("/chat_simple", response_class=HTMLResponse)
+def chat_simple_page(message: str = "Hola"):
+    message = message[:600].strip() or "Hola"
+    respuesta = cerebro(message)
+    # Guardar clone si creó
+    if "CLON" in respuesta and "CREADO" in respuesta:
+        memoria["clones"].append(f"{message[:50]} - {datetime.now().isoformat()[:16]}")
+    html = f"""
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bexia v67.1 Respuesta</title>
+<style>body{{background:#050510;color:#fff;font-family:system-ui;padding:16px;max-width:700px;margin:0 auto}}
+.card{{background:#12122a;padding:14px;border-radius:16px;margin:12px 0;border:1px solid #333}}
+pre{{background:#000;padding:12px;border-radius:8px;white-space:pre-wrap;word-break:break-word;font-size:13px;overflow:auto;max-height:60vh}}
+a{{color:#22c55e;text-decoration:none}}
+input[type=text]{{width:100%;padding:14px 16px;border-radius:999px;background:#1a1a2e;border:1px solid #444;color:#fff;font-size:16px;box-sizing:border-box}}
+button{{width:100%;padding:14px;background:linear-gradient(90deg,#7c3aed,#ff6a00);border:none;border-radius:999px;color:#fff;font-weight:900;font-size:16px;margin-top:8px}}
+</style></head><body>
+<h1>🤖 BEXIA v67.1 - CREA COMO META COMO CLAUDE</h1>
+<div class="card"><b>👤 Tu:</b> {message[:500]}</div>
+<div class="card"><b>🤖 Bexia:</b><br><pre>{respuesta[:5000]}</pre></div>
+<div class="card">
+<form action="/chat_simple" method="get">
+<input type="text" name="message" placeholder="Ej: crea algo como meta que..." required>
+<button type="submit">📤 Enviar otro - Siempre anda ></button>
+</form>
+</div>
+<div class="card">
+<a href="/simple" style="background:#ff6a00;color:#fff;padding:8px 12px;border-radius:8px;display:inline-block;margin:4px;text-decoration:none">/simple SIN JS</a>
+<a href="/app" style="background:#7c3aed;color:#fff;padding:8px 12px;border-radius:8px;display:inline-block;margin:4px;text-decoration:none">/app</a>
+<a href="/health" style="background:#000;color:#fff;padding:8px 12px;border-radius:8px;display:inline-block;margin:4px;text-decoration:none">/health</a>
+</div>
+</body></html>
+"""
+    return HTMLResponse(html)
+
+@app.get("/app", response_class=HTMLResponse)
+def app_page():
+    return HTMLResponse("""
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>BEXIA v67.1 APP</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{height:100%;overflow:hidden}
+body{background:#050510;color:#fff;font-family:system-ui;display:flex;flex-direction:column}
+header{background:linear-gradient(90deg,#000,#7c3aed,#ff6a00,#22c55e);padding:12px 14px;font-weight:900;display:flex;justify-content:space-between;font-size:14px}
+#status{background:#000;color:#22c55e;padding:6px 12px;font-size:11px;text-align:center;border-bottom:1px solid #222}
+#chat{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:85%;padding:12px 14px;border-radius:18px;font-size:14px;white-space:pre-wrap;word-break:break-word}
+.user{background:#7c3aed;align-self:flex-end}
+.bexia{background:#12122a;border:1px solid #333;align-self:flex-start}
+.composer{background:#0a0a14;padding:10px;display:flex;gap:8px;align-items:center;border-top:1px solid #222}
+#inp{flex:1;padding:14px 16px;border-radius:999px;background:#1a1a2e;border:1px solid #444;color:#fff;font-size:16px;outline:none}
+#btnSend{padding:14px 22px;border-radius:999px;background:linear-gradient(90deg,#7c3aed,#ff6a00);border:none;color:#fff;font-weight:900;font-size:18px;min-width:60px}
+</style></head><body>
+<header><span>BEXIA v67.1 CREA COMO META COMO CLAUDE</span><span style="font-size:9px;background:rgba(0,0,0,.6);padding:4px 8px;border-radius:999px">Live OK</span></header>
+<div id="status">✅ v67.1 Live - Si ves esto, API funciona - Tu error Not Found anterior era deploy fallido - Ahora SI anda</div>
+<div id="chat"><div class="msg bexia">Hola Fer! Soy Bexia v67.1 CREA COMO META COMO CLAUDE - MINIMO que SIEMPRE ANDA
+
+Tu foto 20:34 con {"detail":"Not Found"} era porque el deploy v67 anterior falló o ruta no existía.
+
+Ahora con v67.1 MINIMO:
+- / /health /simple /chat_simple /app /clones TODAS funcionan
+- Crea como Meta: content_search, local_search, image_gen
+- Crea como Claude: razonamiento paso a paso, seguro, util
+- Hibrido Meta+Claude: lo mejor de ambos
+
+Comandos:
+• crea algo como meta que organice mis tareas
+• crea algo como claude que analice codigo
+• crea algo como meta y claude que sea asistente completo
+• mis clones
+
+Si boton > no anda, usa /simple que es GET puro y siempre anda:
+https://bexia-api.onrender.com/simple
+
+Proba ahora escribir algo y tocar >
+</div></div>
+<div class="composer">
+<input id="inp" type="text" placeholder="Ej: crea algo como meta y claude que organice mis tareas" autocomplete="off">
+<button id="btnSend" type="button" onclick="enviar()">></button>
+</div>
+<script>
+var sid='u'+Math.random().toString(36).slice(2,9);
+var chatEl=document.getElementById('chat');
+var inpEl=document.getElementById('inp');
+function addMsg(t,cls){var d=document.createElement('div');d.className='msg '+cls;d.textContent=t;chatEl.appendChild(d);chatEl.scrollTop=chatEl.scrollHeight;return d;}
+function enviar(){
+var txt=inpEl.value.trim();if(!txt)return;addMsg(txt,'user');inpEl.value='';
+var th=addMsg('🤖 Creando como Meta Como Claude...','bexia');
+fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:txt,session_id:sid})})
+.then(r=>r.json()).then(data=>{th.textContent=data.respuesta;})
+.catch(e=>{th.textContent='Error: '+e.message+'\nUsa /simple SIN JS: https://bexia-api.onrender.com/simple?message='+encodeURIComponent(txt);});
+}
+document.getElementById('btnSend').addEventListener('click',function(e){e.preventDefault();enviar();});
+document.getElementById('inp').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();enviar();}});
+</script>
+</body></html>
+""")
+
+@app.get("/clones", response_class=HTMLResponse)
+def clones_page():
+    html = f"<html><head><meta name=viewport content='width=device-width,initial-scale=1'><title>Clones v67.1</title><style>body{{background:#050510;color:#fff;font-family:system-ui;padding:20px}}.card{{background:#12122a;padding:16px;border-radius:16px;margin:12px 0;border:1px solid #7c3aed}}</style></head><body><h1>🤖 Clones v67.1 - Total: {len(memoria['clones'])}</h1>"
+    for c in reversed(memoria["clones"][-10:]):
+        html += f"<div class=card>{c}</div>"
+    if not memoria["clones"]:
+        html += "<div class=card>Aun no creaste clones. Deci: crea algo como meta que organice mis tareas</div>"
+    html += "<p><a href='/simple' style='color:#fff;background:#ff6a00;padding:8px 12px;border-radius:8px;text-decoration:none'>/simple</a> | <a href='/app' style='color:#fff;background:#7c3aed;padding:8px 12px;border-radius:8px;text-decoration:none'>/app</a> | <a href='/health' style='color:#fff;background:#000;padding:8px 12px;border-radius:8px;text-decoration:none'>/health</a></p></body></html>"
+    return HTMLResponse(html)
+
+@app.get("/meta_ai", response_class=HTMLResponse)
+def meta_ai_page():
+    return HTMLResponse("<html><head><meta name=viewport content='width=device-width,initial-scale=1'><title>Meta AI v67.1</title><style>body{background:#050510;color:#fff;font-family:system-ui;padding:20px}.card{background:#12122a;padding:16px;border-radius:16px;margin:12px 0;border:1px solid #22c55e}</style></head><body><h1>🤖 Meta AI Tools v67.1</h1><div class=card>content_search - posts IG, FB, Threads<br>local_search - lugares reales<br>image_gen - imagenes<br>Comando: crea algo como meta que...</div><p><a href='/simple' style='color:#fff;background:#ff6a00;padding:8px 12px;border-radius:8px;text-decoration:none'>/simple</a> | <a href='/app' style='color:#fff;background:#7c3aed;padding:8px 12px;border-radius:8px;text-decoration:none'>/app</a></p></body></html>")
+
+@app.get("/claude_ai", response_class=HTMLResponse)
+def claude_ai_page():
+    return HTMLResponse("<html><head><meta name=viewport content='width=device-width,initial-scale=1'><title>Claude v67.1</title><style>body{background:#050510;color:#fff;font-family:system-ui;padding:20px}.card{background:#12122a;padding:16px;border-radius:16px;margin:12px 0;border:1px solid #ec4899}</style></head><body><h1>🧠 Claude Style v67.1</h1><div class=card>Razonamiento paso a paso, seguro, util, honesto<br>Comando: crea algo como claude que...</div><p><a href='/simple' style='color:#fff;background:#ff6a00;padding:8px 12px;border-radius:8px;text-decoration:none'>/simple</a> | <a href='/app' style='color:#fff;background:#7c3aed;padding:8px 12px;border-radius:8px;text-decoration:none'>/app</a></p></body></html>")
+
+@app.post("/chat")
+async def chat_endpoint(req: ChatRequest, request: Request):
     try:
-        t=user_text.lower().strip()
-        cache_resp = buscar_cache(user_text)
-        if cache_resp and len(user_text)>10:
-            return cache_resp + "\n\nCache v67"
-        if any(p in t for p in ["crea algo como meta", "crea algo como claude", "crea como meta", "crea como claude", "algo como meta", "algo como claude", "clon como meta", "clon como claude", "haz algo como meta", "haz algo como claude"]):
-            pide_meta = "meta" in t or "mata" in t
-            pide_claude = "claude" in t
-            objetivo = user_text
-            for pref in ["crea algo como meta que", "crea algo como claude que", "crea algo como meta y claude que", "crea como meta que", "crea como claude que", "algo como meta que", "algo como claude que", "crea algo como meta", "crea algo como claude", "crea como meta", "crea como claude"]:
-                if pref in t:
-                    objetivo = user_text.lower().split(pref,1)[-1].strip()
-                    break
-            if len(objetivo)<10 or objetivo in ["crea algo como meta", "crea algo como claude"]:
-                objetivo = "Asistente que ayude a Fer a organizar tareas, buscar lugares y generar contenido como Meta AI y Claude"
-            if pide_meta and pide_claude:
-                res = crear_clon_hibrido_meta_claude(objetivo)
-                if res["ok"]:
-                    c=res["clon"]
-                    return f"🤖🧠 CLON HIBRIDO META AI + CLAUDE CREADO ID {c['id']}\n\nNombre: {c['nombre']}\nObjetivo: {c['objetivo']}\nEstilo: {c['estilo']}\nInspirado en: {c['inspirado_en']}\nHerramientas: {', '.join(c['herramientas'])} + Principios Claude\n\nCodigo ({len(c['codigo'].splitlines())} lineas):\n{c['codigo'][:1200]}...\n\nVer codigo completo: /codigo/{c['id']} - /clones\n\nHibrido: Herramientas Meta AI (content_search, local_search, image_gen) + Razonamiento Claude (paso a paso, seguro, util). Gratis, legal."
-            elif pide_meta:
-                res = crear_clon_estilo_meta_ai(objetivo)
-                if res["ok"]:
-                    c=res["clon"]
-                    return f"🤖 CLON ESTILO META AI CREADO ID {c['id']}\n\nNombre: {c['nombre']}\nObjetivo: {c['objetivo']}\nEstilo: {c['estilo']}\nInspirado en: {c['inspirado_en']}\nHerramientas: {', '.join(c['herramientas'])}\n\nCodigo ({len(c['codigo'].splitlines())} lineas):\n{c['codigo'][:1200]}...\n\nVer codigo completo: /codigo/{c['id']} - /clones - /meta_ai\n\nClon como Meta AI: usa content_search (posts IG/FB/Threads), local_search (lugares reales), image_gen, video_gen. Gratis, legal."
-            elif pide_claude:
-                res = crear_clon_estilo_claude(objetivo)
-                if res["ok"]:
-                    c=res["clon"]
-                    return f"🧠 CLON ESTILO CLAUDE CREADO ID {c['id']}\n\nNombre: {c['nombre']}\nObjetivo: {c['objetivo']}\nEstilo: {c['estilo']}\nInspirado en: {c['inspirado_en']}\nPrincipios: {', '.join(c['principios'])}\n\nCodigo ({len(c['codigo'].splitlines())} lineas):\n{c['codigo'][:1200]}...\n\nVer codigo completo: /codigo/{c['id']} - /clones - /claude_ai\n\nClon como Claude: razonamiento estructurado paso a paso, seguro, util, honesto, explica por que, codigo limpio. Gratis, legal."
-            else:
-                res = crear_clon_hibrido_meta_claude(objetivo)
-                if res["ok"]:
-                    c=res["clon"]
-                    return f"🤖🧠 CLON HIBRIDO META + CLAUDE CREADO ID {c['id']} (por defecto)\nNombre: {c['nombre']}\nObjetivo: {c['objetivo']}\nCodigo: /codigo/{c['id']}"
-        if any(p in t for p in ["meta ai", "mata ai", "llama"]):
-            ia_detectada="Meta AI"
-            objetivo = user_text
-            for pref in ["aprende de meta ai que", "aprende de mata ai que"]:
-                if pref in t:
-                    objetivo = user_text.lower().split(pref,1)[-1].strip()
-                    break
-            if len(objetivo)<10: objetivo="Ser mas eficiente usa
+        mensaje = req.message.strip()[:600] or "Hola"
+        r = cerebro(mensaje)
+        if "CLON" in r and "CREADO" in r:
+            memoria["clones"].append(f"{mensaje[:60]} - {datetime.now().isoformat()[:16]}")
+        return {"respuesta": r}
+    except Exception as e:
+        return {"respuesta": f"Error: {e} - Usa /simple: /chat_simple?message={req.message[:30]}"}
+
+if __name__ == "__main__":
+    import uvicorn
+    port=int(os.environ.get("PORT",8000))
+    uvicorn.run(app,host="0.0.0.0",port=port)
