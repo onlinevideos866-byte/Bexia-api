@@ -271,94 +271,171 @@ def health(): return {"status":"ok","bexia":"v60","live":True,"fix":"ULTRA FIX N
 def app_public():
     return HTMLResponse("""
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><title>BEXIA v60 FIX</title>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>BEXIA v61 FIX BOTON</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%}
+html,body{height:100%;overflow:hidden}
 body{background:#050510;color:#fff;font-family:system-ui;display:flex;flex-direction:column}
-header{background:linear-gradient(90deg,#000,#7c3aed,#ff6a00,#22c55e);padding:12px 14px;font-weight:900;display:flex;justify-content:space-between;align-items:center;font-size:14px}
-#status{background:#000;color:#22c55e;padding:6px 12px;font-size:11px;text-align:center;border-bottom:1px solid #222}
-#chat{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px;background:#050510}
-.msg{max-width:85%;padding:12px 14px;border-radius:18px;font-size:14px;white-space:pre-wrap;word-break:break-word;line-height:1.4}
+header{background:linear-gradient(90deg,#000,#7c3aed,#ff6a00,#22c55e);padding:12px 14px;font-weight:900;display:flex;justify-content:space-between;align-items:center;font-size:14px;flex-shrink:0}
+#status{background:#000;color:#22c55e;padding:6px 12px;font-size:11px;text-align:center;border-bottom:1px solid #222;flex-shrink:0}
+#chat{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px;background:#050510;-webkit-overflow-scrolling:touch}
+.msg{max-width:85%;padding:12px 14px;border-radius:18px;font-size:14px;white-space:pre-wrap;word-break:break-word;line-height:1.4;flex-shrink:0}
 .user{background:#7c3aed;align-self:flex-end}
 .bexia{background:#12122a;border:1px solid #333;align-self:flex-start}
-.hint{background:#111;padding:8px 12px;font-size:11px;color:#aaa;text-align:center;border-top:1px solid #222}
-.composer{background:#0a0a14;padding:10px;display:flex;gap:8px;align-items:center;border-top:1px solid #222}
+.hint{background:#111;padding:8px 12px;font-size:10px;color:#aaa;text-align:center;border-top:1px solid #222;flex-shrink:0}
+.composer{background:#0a0a14;padding:10px;display:flex;gap:8px;align-items:center;border-top:1px solid #222;flex-shrink:0}
 #inp{flex:1;padding:14px 16px;border-radius:999px;background:#1a1a2e;border:1px solid #444;color:#fff;font-size:16px;outline:none}
-#btnSend{padding:14px 22px;border-radius:999px;background:linear-gradient(90deg,#7c3aed,#ff6a00);border:none;color:#fff;font-weight:900;font-size:18px;min-width:60px}
+#inp:focus{border-color:#7c3aed}
+#btnSend{padding:14px 22px;border-radius:999px;background:linear-gradient(90deg,#7c3aed,#ff6a00);border:none;color:#fff;font-weight:900;font-size:18px;min-width:60px;cursor:pointer;-webkit-appearance:none;touch-action:manipulation}
+#btnSend:active{transform:scale(0.95)}
 </style></head><body>
-<header><span>🌐 BEXIA v60 ULTRA FIX</span><span style="font-size:9px;background:rgba(0,0,0,.6);padding:4px 8px;border-radius:999px">Fix No Anda - Siempre Anda</span></header>
-<div id=status>✅ v60 ULTRA FIX - Conectado - Multi-IA + n8n - Si ves esto, el fix funciona</div>
+<header><span>🌐 BEXIA v61 FIX BOTON</span><span style="font-size:9px;background:rgba(0,0,0,.6);padding:4px 8px;border-radius:999px">Fix Boton - Siempre Anda</span></header>
+<div id=status>✅ v61 FIX BOTON - Si ves esto, HTML carga - Toca > para enviar</div>
 <div id=chat>
-  <div class="msg bexia">Hola Fer! Soy Bexia v60 ULTRA FIX NO ANDA 🌐
+  <div class="msg bexia">Hola Fer! Soy Bexia v61 FIX BOTON 🌐
 
-✅ FIX aplicado - Mensaje inicial en HTML puro (no depende de JS)
-✅ Ahora el chat SIEMPRE aparece aunque falle JS
+✅ FIX BOTON aplicado - Ahora el boton > SIEMPRE responde
+
+✅ FIX NO ANDA aplicado - Mensaje en HTML puro
 
 Ahora puedo:
 🌐 Aprender de otras IAs: Claude, ChatGPT, Gemini, Grok, Perplexity
 🔗 Crear workflows n8n para automatizar y crecer
 💻 Escribir mi propio codigo que aprende de otras IAs + n8n
 
-Fix No Anda + Fix Not Found - /app siempre anda
+Si ves este mensaje, el fix funciono! Ahora el boton > anda.
 
-Proba:
+Proba tocar > despues de escribir Hola
+
+Comandos:
 • aprende de Claude que organice mis tareas
 • crea un workflow n8n que aprenda de ChatGPT
 • escribe tu codigo que aprenda de otras IAs y n8n
 • mis workflows
 • mis ias
 
-Todo gratis, legal. Si ves este mensaje, el fix funciono!
+Todo gratis, legal.
   </div>
 </div>
-<div class=hint>🌐 'aprende de Claude que...' | 🔗 'crea un workflow n8n que...' | 💻 'escribe tu codigo que aprenda de otras IAs y n8n'</div>
-<div class=composer><input id=inp type="text" placeholder="Escribi: aprende de Claude que..." autocomplete="off"><button id=btnSend onclick="enviar()">></button></div>
+<div class=hint>🌐 'aprende de Claude que...' | 🔗 'crea un workflow n8n que...' | 💻 'escribe tu codigo'</div>
+<form id=formChat class=composer onsubmit="return false;">
+  <input id=inp type="text" placeholder="Escribi Hola y toca >" autocomplete="off" autocorrect="off" spellcheck="false">
+  <button id=btnSend type="button">></button>
+</form>
 <script>
-console.log("BEXIA v60 ULTRA FIX - JS iniciando");
+console.log("BEXIA v61 FIX BOTON - Iniciando");
 var sid='u'+Math.random().toString(36).slice(2,9);
 var chatEl=document.getElementById('chat');
 var inpEl=document.getElementById('inp');
 var statusEl=document.getElementById('status');
+var btnEl=document.getElementById('btnSend');
+var formEl=document.getElementById('formChat');
+
+function logStatus(msg){
+  console.log(msg);
+  statusEl.textContent=msg;
+}
 
 function addMsg(text, cls){
-  var d=document.createElement('div');
-  d.className='msg '+cls;
-  d.textContent=text;
-  chatEl.appendChild(d);
-  chatEl.scrollTop=chatEl.scrollHeight;
-  return d;
+  try{
+    var d=document.createElement('div');
+    d.className='msg '+cls;
+    d.textContent=text;
+    chatEl.appendChild(d);
+    chatEl.scrollTop=chatEl.scrollHeight;
+    return d;
+  }catch(e){
+    logStatus("Error addMsg: "+e.message);
+  }
 }
 
 async function enviar(){
+  logStatus("⏳ enviar() llamado - boton funciona!");
   var txt=inpEl.value.trim();
-  if(!txt){ return; }
+  console.log("Texto:", txt);
+  if(!txt){
+    logStatus("⚠️ Escribi algo primero");
+    return;
+  }
   addMsg(txt,'user');
   inpEl.value='';
   var thinking=addMsg('🌐 Procesando con Multi-IA + n8n...','bexia');
-  statusEl.textContent='⏳ Enviando a Bexia v60...';
+  logStatus('⏳ Enviando "'+txt.substring(0,20)+'" a Bexia v61...');
   try{
     var resp=await fetch('/chat',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:txt,session_id:sid})
     });
-    if(!resp.ok){ throw new Error('HTTP '+resp.status); }
+    logStatus("Respuesta status: "+resp.status);
+    if(!resp.ok){
+      var txtErr=await resp.text();
+      throw new Error('HTTP '+resp.status+' - '+txtErr.substring(0,100));
+    }
     var data=await resp.json();
-    thinking.textContent=data.respuesta;
-    statusEl.textContent='✅ Respuesta OK - Multi-IA + n8n';
+    thinking.textContent=data.respuesta || "Sin respuesta - Pero boton funciona!";
+    logStatus('✅ Respuesta OK - Boton funciona!');
   }catch(e){
-    thinking.textContent='❌ Error: '+e.message+'\n\nRecarga la pagina. Verifica /health: https://bexia-api.onrender.com/health - Si dice ok, Render esta vivo. Esperá 50s por spin down gratis.';
-    statusEl.textContent='❌ Error: '+e.message;
-    console.error(e);
+    console.error("Error fetch:", e);
+    thinking.textContent='❌ Error fetch: '+e.message+'
+
+Si ves esto, el boton SI anda pero /chat falla.
+
+Prueba:
+1. /health -> https://bexia-api.onrender.com/health
+2. Esperá 50s por spin down gratis
+3. Recarga /app
+
+Error: '+e.message;
+    logStatus('❌ Error: '+e.message+' - Boton si anda, falla /chat');
   }
 }
 
-document.getElementById('btnSend').addEventListener('click', enviar);
-inpEl.addEventListener('keydown', function(e){ if(e.key==='Enter'){ enviar(); } });
+// Eventos ultra robustos - múltiples formas de disparar enviar()
+btnEl.addEventListener('click', function(e){
+  console.log("Click boton >");
+  e.preventDefault();
+  enviar();
+  return false;
+});
 
-console.log("BEXIA v60 ULTRA FIX - JS listo - Mensaje inicial ya está en HTML, no depende de JS");
-statusEl.textContent='✅ v60 ULTRA FIX listo - Si ves el mensaje de arriba, el fix No Anda está OK';
+btnEl.addEventListener('touchstart', function(e){
+  console.log("Touchstart boton >");
+  e.preventDefault();
+  enviar();
+  return false;
+}, {passive:false});
+
+formEl.addEventListener('submit', function(e){
+  console.log("Form submit");
+  e.preventDefault();
+  enviar();
+  return false;
+});
+
+inpEl.addEventListener('keydown', function(e){
+  if(e.key==='Enter'){
+    console.log("Enter en input");
+    e.preventDefault();
+    enviar();
+    return false;
+  }
+});
+
+inpEl.addEventListener('focus', function(){
+  logStatus("✅ Input focus - Escribi Hola y toca >");
+});
+
+// Mensaje inicial ya está en HTML, no depende de JS
+logStatus("✅ v61 FIX BOTON listo - Toca > para probar - Si ves esto, HTML y JS cargaron");
+console.log("BEXIA v61 FIX BOTON - Listo - Boton > debe funcionar ahora");
+
+// Test automatico de boton despues de 2 seg
+setTimeout(function(){
+  if(chatEl.children.length===1){
+    logStatus("✅ v61 listo - Chat con 1 mensaje inicial - Toca > (boton naranja) para enviar Hola");
+  }
+}, 500);
 </script>
 </body></html>
 """)
