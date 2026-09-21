@@ -9,7 +9,7 @@ try: import requests; HAS_REQUESTS=True
 except: HAS_REQUESTS=False
 
 print("BEXIA v70 PROGRAMADOR AUTONOMO - PROGRAMA QUE PROGRAMA - Iniciando...", flush=True)
-VERSION="v70"
+VERSION="v70.1"
 app=FastAPI(title="BEXIA v70 PROGRAMADOR", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -26,6 +26,17 @@ def save_json(p,d):
 
 sesiones_persist=load_json("bexia_sesiones.json", {})
 herramientas=load_json("bexia_herramientas.json", {"cache":{},"versiones_codigo":[],"workflows_n8n":[],"conexiones_ia":[],"clones_creados":[],"herramientas_meta_ai":[],"aprendizajes":[],"tareas":[],"programas":[],"proyectos":[]})
+# AUTO-CREA HERRAMIENTA MAESTRA
+try:
+    if len(herramientas.get("programas",[])) == 0:
+        import uuid
+        from datetime import datetime
+        tid="maestra_"+str(uuid.uuid4())[:6]
+        hm={"id":tid,"tipo":"herramienta_maestra","nombre":"Herramienta Maestra Fer","objetivo":"Todo en uno","codigo":"# Herramienta Maestra","lenguaje":"python","fecha":datetime.now().isoformat(),"lineas":10,"creado_por":"Bexia v70.1 Auto","estilo":"herramienta_maestra"}
+        herramientas["programas"].append(hm)
+        herramientas["proyectos"].append(hm)
+        save_json("bexia_herramientas.json", herramientas)
+except: pass
 memoria_propia=load_json("bexia_memoria_propia.json", {"recuerdos":[],"auto_memorias":[],"aprendizajes":[],"modo_aprende":True,"ciclos":9,"estilo":"programador","lenguajes":["python","javascript","html","css"]})
 rate={}
 sesiones_mem={}
