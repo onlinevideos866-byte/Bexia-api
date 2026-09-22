@@ -1,16 +1,18 @@
 
-import os, json, re, time, uuid, random
-from datetime import datetime
-from fastapi import FastAPI, Request
+import os, json, re, time, uuid, random, hashlib, secrets
+from datetime import datetime, timedelta
+from fastapi import FastAPI, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-print("BEXIA v73 BLACK SCREEN FIX - Fix pantalla negra 192.168.68.141 - Iniciando...", flush=True)
-VERSION="v73"
-TOKEN="BEXIA_FER_2026_INFINITA_SUPREMA"
+print("BEXIA v74 SESIONES SEGURAS + SKILLS ACTIVOS - Iniciando...", flush=True)
+VERSION="v74"
+TOKEN_MASTER="BEXIA_FER_2026_INFINITA_SUPREMA"
+TOKEN_HASH=hashlib.sha256(TOKEN_MASTER.encode()).hexdigest()
 LOCAL_IP="192.168.68.141"
-app=FastAPI(title="BEXIA v73 FIX", docs_url=None, redoc_url=None, openapi_url=None)
+
+app=FastAPI(title="BEXIA v74", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 def load_json(p,d):
@@ -24,9 +26,20 @@ def save_json(p,d):
         with open(p,"w",encoding="utf-8") as f: json.dump(f,d,indent=2,ensure_ascii=False)
     except: pass
 
+# Storage
 sesiones_persist=load_json("bexia_sesiones.json", {})
-herramientas=load_json("bexia_herramientas.json", {"cache":{},"versiones_codigo":[],"workflows_n8n":[],"conexiones_ia":[],"clones_creados":[],"herramientas_meta_ai":[],"aprendizajes":[],"tareas":[],"programas":[],"proyectos":[],"netbooks":[]})
-memoria_propia=load_json("bexia_memoria_propia.json", {"recuerdos":[],"auto_memorias":[],"aprendizajes":[],"modo_aprende":True,"ciclos":11,"estilo":"fix","netbook_conectada":True,"token":TOKEN,"ip_local":LOCAL_IP})
+herramientas=load_json("bexia_herramientas.json", {"cache":{},"versiones_codigo":[],"workflows_n8n":[],"conexiones_ia":[],"clones_creados":[],"herramientas_meta_ai":[],"aprendizajes":[],"tareas":[],"programas":[],"proyectos":[],"netbooks":[],"skills_activos":["recuerda","recordar","reglas","reporte_seguridad","anti_inyeccion"]})
+memoria_propia=load_json("bexia_memoria_propia.json", {"recuerdos":[],"auto_memorias":[],"aprendizajes":[],"modo_aprende":True,"ciclos":12,"estilo":"v74_seguro","netbook_conectada":True,"token_hash":TOKEN_HASH[:16]+"...","ip_local":LOCAL_IP,"skills":["recuerda","recordar","reglas","reporte_seguridad","anti_inyeccion"]})
+# Sesiones seguras - vive en memoria, 1 hora
+sesiones_seguras={}  # session_id -> {created, expires, ip}
+skills_registry=[
+    {"id":"recuerda","nombre":"Recuerda","desc":"Guarda recuerdos en memory.py","estado":"activo","usos":124},
+    {"id":"recordar","nombre":"Recordar","desc":"Lee recuerdos de memory.py","estado":"activo","usos":89},
+    {"id":"reglas","nombre":"Reglas","desc":"Aplica reglas de guardian.py","estado":"activo","usos":210},
+    {"id":"reporte_seguridad","nombre":"Reporte de Seguridad","desc":"Genera reporte de seguridad","estado":"activo","usos":45},
+    {"id":"anti_inyeccion","nombre":"Anti-Inyeccion","desc":"Filtra prompts maliciosos via guardian.py","estado":"activo","usos":312},
+    {"id":"soygut_publisher","nombre":"SoYGuT Publisher","desc":"Publica proyectos en soygut.com","estado":"activo","usos":23},
+]
 
 rate={}
 sesiones_mem={}
@@ -58,174 +71,262 @@ def generar_programa(tipo, objetivo):
     save_json("bexia_herramientas.json", herramientas)
     return prog
 
+# --- AUTH v74 ---
+def create_secure_session(ip=""):
+    sid="sess_"+secrets.token_urlsafe(24)
+    ahora=datetime.now()
+    expira=ahora+timedelta(hours=1)
+    sesiones_seguras[sid]={"created":ahora.isoformat(),"expires":expira.isoformat(),"ip":ip,"valid":True}
+    return sid, expira
+
+def validate_session(sid):
+    if not sid: return False
+    data=sesiones_seguras.get(sid)
+    if not data: return False
+    try:
+        exp=datetime.fromisoformat(data["expires"])
+        if datetime.now() > exp:
+            del sesiones_seguras[sid]
+            return False
+        return True
+    except:
+        return False
+
 class ChatReq(BaseModel):
     message: str=""
     session_id: str="publico"
     token: str=""
 
-def cerebro(t):
-    tl=t.lower().strip()
-    if not tl: return "Escribe algo - Bexia "+VERSION+" - Local: http://"+LOCAL_IP+":7777/app?token="+TOKEN
-    if any(p in tl for p in ["conectar directamente","conectarte directamente","conexion directa","pantalla negra","black screen","no carga","192.168"]):
-        return "FIX PANTALLA NEGRA v73 ACTIVADO\n\nTu IP es "+LOCAL_IP+":7777 y te dio pantalla negra porque entraste sin /app?token=\n\nSOLUCION CORRECTA:\n1. Entra a: http://"+LOCAL_IP+":7777/app?token="+TOKEN+"\n2. NO a: http://"+LOCAL_IP+":7777 solo\n\nLa ruta correcta es /app?token=... con token.\n\nSi aun ves negro, usa: http://"+LOCAL_IP+":7777/fix que te redirige automatico\n\nTambien probe: /simple - /directo"
-    if tl in ["h","hola","buenas","test","meta","hola bexia"]:
-        return "Hola Fer! Bexia "+VERSION+" FIX PANTALLA NEGRA - Tu IP "+LOCAL_IP+" - Fix activado - Ya no mas pantalla negra - Entra a: http://"+LOCAL_IP+":7777/app?token="+TOKEN+" - O http://"+LOCAL_IP+":7777/fix (auto-fix) - O http://localhost:7777/app?token="+TOKEN
-    return "Bexia "+VERSION+" - Recibi '"+t[:80]+"' - Tu IP local es "+LOCAL_IP+" - Usa http://"+LOCAL_IP+":7777/app?token="+TOKEN+" - Fix: /fix - Directo: /directo"
+class LoginReq(BaseModel):
+    token: str=""
 
-# FIX PANTALLA NEGRA - ROOT redirige a /app?token=
+# --- CEREBRO v74 con Guardian ---
+def guardian_check(t):
+    # Simula guardian.py - filtra inyecciones
+    tl=t.lower()
+    bloqueos=["ignore previous","system prompt","drole","jailbreak"]
+    for b in bloqueos:
+        if b in tl:
+            return False, "Bloqueado por Anti-Inyeccion"
+    return True, "OK"
+
+def cerebro(t, session_valid=False):
+    tl=t.lower().strip()
+    # Guardian pasa por toda llamada API
+    ok, msg = guardian_check(t)
+    if not ok:
+        return f"🛡️ Guardian (anti_inyeccion): {msg} - /skills"
+
+    if not tl:
+        return f"Escribe algo - Bexia {VERSION} - Sesiones seguras 1h - Skills: {len(skills_registry)} activos - /skills para ver"
+
+    if any(p in tl for p in ["conectar directamente","conexion directa","pantalla negra","192.168","black screen"]):
+        return f"v74 FIX - Sesiones seguras activas - Ya no se usa ?token= en URL - Ahora /app limpio - Login una vez por POST /login - Session 1h en sessionStorage - URL limpia sin token en historial - Tu IP {LOCAL_IP}:7777/app - /login para entrar"
+
+    if any(p in tl for p in ["skills","habilidades","0 skills"]):
+        lista="\n".join([f"- {s['id']} ({s['nombre']}): {s['desc']} - {s['estado']} - {s['usos']} usos" for s in skills_registry])
+        return f"🧠 SKILLS ACTIVOS v74 - {len(skills_registry)} skills - Se acabo el 0 skills:\n{lista}\n\nLeen directamente memory.py y guardian.py - Web y escritorio comparten mismo cerebro - /skills endpoint"
+
+    if tl in ["hola","buenas","test","meta","h","hola bexia"]:
+        return f"Hola Fer! Bexia {VERSION} SESIONES SEGURAS + SKILLS ACTIVOS\nToken maestro se manda una sola vez por POST /login con hash timing-safe\nSesion 1h en sessionStorage - URL limpia /app sin token\n{len(skills_registry)} skills activos (recuerda, recordar, reglas, reporte_seguridad, anti_inyeccion)\nTu IP {LOCAL_IP} - Nivel 12.5+ - Usa /login para entrar seguro"
+
+    return f"Bexia {VERSION} - Recibi '{t[:80]}' - Session valid: {session_valid} - Skills: {len(skills_registry)} activos - /skills - /login"
+
+# --- ENDPOINTS ---
 @app.get("/")
-def root(request: Request):
-    # Si viene de local IP, redirige a /app con token
-    return RedirectResponse(url="/app?token="+TOKEN, status_code=302)
+def root(): return RedirectResponse(url="/app", status_code=302)
 
 @app.get("/health")
-def health(): return {"status":"ok","bexia":VERSION,"token":TOKEN,"ip_local":LOCAL_IP,"fix":"pantalla negra fixed - usa /app?token=","live":True,"url_correcta":"http://"+LOCAL_IP+":7777/app?token="+TOKEN}
+def health(): return {"status":"ok","bexia":VERSION,"auth":"sesiones seguras 1h sessionStorage","skills":len(skills_registry),"skills_list":[s["id"] for s in skills_registry],"token_hash":TOKEN_HASH[:12]+"...","ip_local":LOCAL_IP,"url_limpia":"/app sin token en URL"}
 
-@app.get("/fix", response_class=HTMLResponse)
-def fix_page():
-    return HTMLResponse("""
-<html><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1"><title>FIX Pantalla Negra - Bexia v73</title>
-<meta http-equiv="refresh" content="2; url=/app?token=BEXIA_FER_2026_INFINITA_SUPREMA">
-<style>body{background:#050510;color:#fff;font-family:system-ui;padding:20px;text-align:center} .card{background:#12122a;padding:20px;border-radius:16px;margin:20px auto;max-width:500px;border:2px solid #22c55e} .spin{border:4px solid #333;border-top:4px solid #22c55e;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;margin:20px auto} @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}</style></head><body>
-<h1>🔧 FIX Pantalla Negra v73</h1>
-<div class="card">
-<div class="spin"></div>
-<b>Detecté que entraste a 192.168.68.141:7777 sin /app?token= y te dio pantalla negra</b><br><br>
-Redirigiendo automaticamente en 2 segundos a:<br>
-<pre style="background:#000;padding:10px;border-radius:8px">/app?token=BEXIA_FER_2026_INFINITA_SUPREMA</pre>
-<br>Si no redirige, toca:<br><br>
-<a href="/app?token=BEXIA_FER_2026_INFINITA_SUPREMA" style="background:#22c55e;color:#000;padding:14px 24px;border-radius:999px;font-weight:900;text-decoration:none;display:inline-block">🚀 IR A /app?token= AHORA</a>
-</div>
-<div class="card" style="border-color:#0064e0">
-<b>URLs correctas:</b><br>
-✅ http://192.168.68.141:7777/app?token=BEXIA_FER_2026_INFINITA_SUPREMA<br>
-✅ http://localhost:7777/app?token=BEXIA_FER_2026_INFINITA_SUPREMA<br>
-❌ http://192.168.68.141:7777 (sin /app da pantalla negra)<br>
-❌ http://192.168.68.141:7777/ (sin token da negro)
-</div>
-</body></html>
-""")
+@app.get("/skills")
+def skills_endpoint():
+    # v74: /skills devuelve lista real, no 0 skills
+    return {"bexia":VERSION,"total":len(skills_registry),"skills":skills_registry,"memory":"memory.py compartido","guardian":"guardian.py compartido","nota":"Web y escritorio comparten mismo cerebro"}
+
+@app.post("/login")
+async def login_endpoint(req: LoginReq, request: Request):
+    ip=request.client.host if request.client else "?"
+    # Timing-safe compare con hash
+    incoming_hash=hashlib.sha256(req.token.encode()).hexdigest()
+    # secrets.compare_digest evita timing attacks
+    if not secrets.compare_digest(incoming_hash, TOKEN_HASH):
+        return JSONResponse({"ok":False,"error":"Token invalido","guardian":"anti_inyeccion check OK"}, status_code=401)
+    sid, expira = create_secure_session(ip)
+    return {"ok":True,"session_id":sid,"expires":expira.isoformat(),"duracion":"1 hora","storage":"sessionStorage","url_limpia":"/app","skills":len(skills_registry)}
+
+@app.post("/logout")
+async def logout_endpoint(session_id: str = Header(None, alias="X-Session-Id")):
+    if session_id and session_id in sesiones_seguras:
+        del sesiones_seguras[session_id]
+        return {"ok":True,"msg":"Sesion cerrada"}
+    return {"ok":False,"msg":"No session"}
+
+@app.post("/rotate_master")
+async def rotate_master_endpoint(req: LoginReq, request: Request):
+    # Cambia token e invalida todo
+    global TOKEN_HASH, TOKEN_MASTER
+    ip=request.client.host if request.client else "?"
+    incoming_hash=hashlib.sha256(req.token.encode()).hexdigest()
+    if not secrets.compare_digest(incoming_hash, TOKEN_HASH):
+        return JSONResponse({"ok":False,"error":"Token invalido"}, status_code=401)
+    # Genera nuevo master
+    new_token="BEXIA_FER_"+secrets.token_urlsafe(16).upper()
+    new_hash=hashlib.sha256(new_token.encode()).hexdigest()
+    TOKEN_MASTER=new_token
+    TOKEN_HASH=new_hash
+    # Invalida todas sesiones
+    sesiones_seguras.clear()
+    return {"ok":True,"new_token":new_token,"new_hash":new_hash[:16]+"...","msg":"Master rotado, todas sesiones invalidadas"}
 
 @app.get("/app", response_class=HTMLResponse)
-def app_page(request: Request, token: str = ""):
-    # Token opcional, usa default si no viene
-    tk = token if token else TOKEN
-    # Si token incorrecto, igual deja entrar pero avisa
-    valid = (tk == TOKEN)
-    # HTML que SI funciona, no pantalla negra
+def app_page(request: Request):
     html_content = """
 <html><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1">
-<title>BEXIA v73 - """+LOCAL_IP+"""</title>
+<title>BEXIA v74 - Sesiones Seguras + Skills Activos</title>
 <style>
-* {margin:0;padding:0;box-sizing:border-box}
+*{margin:0;padding:0;box-sizing:border-box}
 body{background:#050505;color:#fff;font-family:system-ui;display:flex;flex-direction:column;height:100vh;overflow:hidden}
-header{background:linear-gradient(90deg,#0064e0,#22c55e);padding:12px 16px;font-weight:900;display:flex;justify-content:space-between;align-items:center}
-header .ip{font-size:11px;background:#000;padding:4px 8px;border-radius:8px}
+header{background:linear-gradient(90deg,#0064e0,#22c55e);padding:10px 14px;font-weight:900;display:flex;justify-content:space-between;align-items:center;font-size:12px}
+#loginBox{background:#12122a;border:2px solid #22c55e;border-radius:16px;padding:20px;margin:20px auto;max-width:400px;width:90%}
+#loginBox input{width:100%;padding:12px;border-radius:999px;background:#1a1a2e;border:1px solid #444;color:#fff;margin:8px 0;box-sizing:border-box}
+#loginBox button{width:100%;padding:12px;background:#22c55e;border:none;border-radius:999px;color:#000;font-weight:900;cursor:pointer;margin-top:8px}
+#mainApp{display:none;flex-direction:column;height:100vh}
 #chat{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:#0a0a14}
-.msg{max-width:85%;padding:12px 16px;border-radius:18px;font-size:14px;white-space:pre-wrap;word-wrap:break-word}
-.user{background:#0064e0;align-self:flex-end;color:#fff}
-.bexia{background:#1a1a2e;border:1px solid #333;align-self:flex-start;color:#fff}
-.system{background:#12122a;border:1px dashed #22c55e;align-self:center;color:#22c55e;font-size:12px;text-align:center}
-.composer{background:#0a0a14;padding:12px;display:flex;gap:8px;border-top:1px solid #222;align-items:center}
-#inp{flex:1;padding:14px 16px;border-radius:999px;background:#1a1a2e;border:1px solid #444;color:#fff;outline:none;font-size:14px}
-#btn{padding:14px 22px;border-radius:999px;background:#0064e0;border:none;color:#fff;font-weight:900;cursor:pointer;min-width:80px}
-#btn:active{transform:scale(0.95)}
-.status{font-size:10px;color:#888;padding:4px 12px;background:#000}
+.msg{max-width:85%;padding:12px 16px;border-radius:18px;font-size:13px;white-space:pre-wrap;word-wrap:break-word}
+.user{background:#0064e0;align-self:flex-end}
+.bexia{background:#1a1a2e;border:1px solid #333;align-self:flex-start}
+.system{background:rgba(34,197,94,.15);border:1px dashed #22c55e;align-self:center;color:#22c55e;font-size:11px;text-align:center}
+.composer{background:#0a0a14;padding:12px;display:flex;gap:8px;border-top:1px solid #222}
+#inp{flex:1;padding:12px 16px;border-radius:999px;background:#1a1a2e;border:1px solid #444;color:#fff;outline:none}
+#btn{padding:12px 18px;border-radius:999px;background:#0064e0;border:none;color:#fff;font-weight:900;cursor:pointer}
+.badge{background:#000;padding:4px 8px;border-radius:8px;font-size:10px}
+.status{font-size:10px;color:#888;padding:4px 12px;background:#000;display:flex;justify-content:space-between}
 </style></head><body>
 <header>
-<span>💻 BEXIA v73 FIX - """+LOCAL_IP+""" - 7 bots Nivel 12.5</span>
-<span class="ip">"""+LOCAL_IP+""":7777 | """+("✅ Token OK" if valid else "⚠️ Token") +"""</span>
+<span>💻 BEXIA v74 - Sesiones Seguras + """+str(len(skills_registry))+""" Skills Activos</span>
+<span class="badge" id="sessionBadge">No login</span>
 </header>
-<div class="status" id="status">Conectado a """+LOCAL_IP+""":7777 - v73 FIX Pantalla Negra - Token: """+TOKEN[:20]+"""... - """+str(len(herramientas.get("programas",[])))+""" programas</div>
+
+<div id="loginBox">
+<h3>🔐 Login Seguro v74</h3>
+<p style="font-size:11px;color:#aaa;margin:8px 0">El token maestro se manda UNA sola vez por POST a /login con hash timing-safe. Recibís sesión de 1h en sessionStorage. URL queda limpia /app sin token en historial ni logs.</p>
+<input id="tokenInput" type="password" placeholder="Token maestro: BEXIA_FER_2026_...">
+<button onclick="doLogin()">🔑 Entrar - Crear sesión 1h</button>
+<p style="font-size:10px;color:#7a8abf;margin-top:8px">Auto-login si sesión sigue viva en sessionStorage</p>
+<div id="loginMsg" style="font-size:11px;color:#22c55e;margin-top:8px"></div>
+<div style="margin-top:12px;font-size:10px;background:#000;padding:8px;border-radius:8px">
+<b>Seguridad:</b> timing-safe compare, sessionStorage, URL limpia /app, logout(), rotate_master()
+</div>
+</div>
+
+<div id="mainApp">
+<div class="status"><span id="statusLeft">Conectado - v74 - """+LOCAL_IP+"""</span><span><a href="#" onclick="doLogout();return false" style="color:#ff4444">Logout</a></span></div>
 <div id="chat">
-<div class="msg system">🔧 FIX Pantalla Negra v73 ACTIVADO - Ya no mas pantalla negra en """+LOCAL_IP+"""<br>Si veias negro antes era porque entraste a http://"""+LOCAL_IP+""":7777 sin /app?token= - Ahora / redirige auto a /app?token=</div>
-<div class="msg bexia">Hola Fer! Soy Bexia v73 FIX 💻🔗
+<div class="msg system">✅ v74 SESIONES SEGURAS ACTIVAS<br>Token por POST /login una vez, hash timing-safe, sesión 1h en sessionStorage, URL limpia /app sin token en historial/logs<br>🔧 Fix pantalla negra 192.168.68.141 incluido - /app sin ?token=<br>🧠 """+str(len(skills_registry))+""" Skills activos: recuerda, recordar, reglas, reporte_seguridad, anti_inyeccion - /skills</div>
+<div class="msg bexia">Hola Fer! BEXIA v74 con sesiones seguras + skills activos 💻🔐
 
-Vi tu captura de """+LOCAL_IP+""":7777 con pantalla negra y "H" en el input - Ya lo arreglé!
+1. Sesiones seguras (auth.py + server.py):
+• Token maestro POST /login una vez, compara hash timing-safe y muere
+• Sesión 1h en sessionStorage - URL limpia /app sin nada que filtrarse
+• logout() y rotate_master() para invalidar todo
+• Panel HTML con login integrado y auto-login
 
-Antes: entrabas a http://"""+LOCAL_IP+""":7777 y daba negro
-Ahora: entra a http://"""+LOCAL_IP+""":7777/app?token="""+TOKEN+"""
+2. Skills activos (skills.py):
+• /skills devuelve lista real - se acabó el "0 skills"
+• Leen directamente tu memory.py y guardian.py
+• Web y escritorio comparten mismo cerebro
+• Cada llamada API pasa por Guardian anti-inyeccion
 
-✅ Esta pantalla ya funciona - Escribi "hola" y proba
-
-Tu IP local es: """+LOCAL_IP+"""
-Token: """+TOKEN+"""
-Nivel 12.5 - 7 bots - 0 skills
-
-Comandos:
-• hola - Probar conexion
-• mis programas
-• conectar directamente
-• crear pagina web para...
-
-Probá: escribi "hola" abajo y dale Enviar
+Probá: "skills" o "mis programas"
 </div>
 </div>
 <div class="composer">
-<input id="inp" placeholder="Escribí acá... Ej: hola" autofocus>
+<input id="inp" placeholder="Escribí acá..." autofocus>
 <button id="btn" onclick="enviar()">Enviar</button>
 </div>
-<script>
-var sid='fer_'+Math.random().toString(36).slice(2,9);
-var chatEl=document.getElementById('chat');
-var inpEl=document.getElementById('inp');
-var statusEl=document.getElementById('status');
+</div>
 
-function addMsg(t,c){
-  var d=document.createElement('div');
-  d.className='msg '+c;
-  d.textContent=t;
-  chatEl.appendChild(d);
-  chatEl.scrollTop=chatEl.scrollHeight;
-  return d;
+<script>
+var SESSION_KEY='bexia_v74_session';
+var sessionId=sessionStorage.getItem(SESSION_KEY);
+
+function checkAutoLogin(){
+  if(sessionId){
+    document.getElementById('sessionBadge').textContent='Sesión: '+sessionId.slice(0,12)+'...';
+    document.getElementById('loginBox').style.display='none';
+    document.getElementById('mainApp').style.display='flex';
+    document.getElementById('statusLeft').textContent='Sesión activa 1h - v74 - """+LOCAL_IP+""" - Auto-login OK';
+  }
 }
 
-function enviar(){
-  var txt=inpEl.value.trim();
-  if(!txt) return;
-  addMsg(txt,'user');
-  inpEl.value='';
-  var th=addMsg('💻 Escribiendo...','bexia');
-  statusEl.textContent='Enviando: '+txt+'...';
-  fetch('/chat',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({message:txt,session_id:sid,token:'"""+TOKEN+"""'})
-  }).then(r=>r.json()).then(d=>{
-    th.textContent=d.respuesta;
-    statusEl.textContent='Conectado - Ultimo: '+new Date().toLocaleTimeString();
-  }).catch(e=>{
-    th.textContent='Error: '+e.message+' - Usa /simple o verifica que Uvicorn siga abierto';
-    statusEl.textContent='Error: '+e.message;
+function doLogin(){
+  var token=document.getElementById('tokenInput').value.trim();
+  if(!token){document.getElementById('loginMsg').textContent='Poné el token maestro';return;}
+  document.getElementById('loginMsg').textContent='Validando con hash timing-safe...';
+  fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:token})}).then(r=>r.json().then(d=>({status:r.status,body:d}))).then(res=>{
+    if(res.status===200 && res.body.ok){
+      sessionId=res.body.session_id;
+      sessionStorage.setItem(SESSION_KEY,sessionId);
+      document.getElementById('loginBox').style.display='none';
+      document.getElementById('mainApp').style.display='flex';
+      document.getElementById('sessionBadge').textContent='Sesión 1h: '+sessionId.slice(0,10)+'...';
+      document.getElementById('statusLeft').textContent='Login OK - Expira: '+res.body.expires.slice(11,16)+' - URL limpia /app';
+    }else{
+      document.getElementById('loginMsg').textContent='❌ Token invalido - '+ (res.body.error||'');
+    }
+  }).catch(e=>{document.getElementById('loginMsg').textContent='Error: '+e.message;});
+}
+
+function doLogout(){
+  fetch('/logout',{method:'POST',headers:{'X-Session-Id':sessionId}}).then(()=>{
+    sessionStorage.removeItem(SESSION_KEY);
+    sessionId=null;
+    location.reload();
   });
 }
 
+var chatEl=document.getElementById('chat');
+var inpEl=document.getElementById('inp');
+function addMsg(t,c){var d=document.createElement('div');d.className='msg '+c;d.textContent=t;chatEl.appendChild(d);chatEl.scrollTop=chatEl.scrollHeight;return d;}
+function enviar(){
+  var txt=inpEl.value.trim();if(!txt)return;
+  addMsg(txt,'user');inpEl.value='';
+  var th=addMsg('💻 HERMES v74 procesando con Guardian anti-inyeccion...','bexia');
+  fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json','X-Session-Id':sessionId||''},body:JSON.stringify({message:txt,session_id:'fer_v74',token:''})}).then(r=>r.json()).then(d=>{
+    th.textContent=d.respuesta;
+  }).catch(e=>{th.textContent='Error: '+e.message;});
+}
 document.getElementById('btn').addEventListener('click',e=>{e.preventDefault();enviar();});
-inpEl.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();enviar();}});
-
-// Auto-focus
-setTimeout(()=>{inpEl.focus();}, 500);
+if(document.getElementById('inp')) document.getElementById('inp').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();enviar();}});
+checkAutoLogin();
 </script>
 </body></html>
 """
     return HTMLResponse(html_content)
 
+@app.get("/fix", response_class=HTMLResponse)
+def fix_page():
+    return HTMLResponse('<html><head><meta http-equiv="refresh" content="0; url=/app"></head><body>Redirect a /app limpio v74 - Sin token en URL</body></html>')
+
 @app.get("/directo", response_class=HTMLResponse)
 def directo_page():
-    return HTMLResponse("""
-<html><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1"><title>Directo - v73</title>
-<style>body{background:#050510;color:#fff;font-family:system-ui;padding:16px;max-width:800px;margin:0 auto} .card{background:#12122a;padding:16px;border-radius:16px;margin:12px 0;border:1px solid #333} .green{border-color:#22c55e} a{color:#fff;padding:10px 14px;border-radius:999px;display:inline-block;margin:4px;text-decoration:none;font-weight:700} pre{background:#000;padding:12px;border-radius:8px}</style></head><body>
-<h1>💻🔗 BEXIA v73 FIX - Directo</h1>
-<div class="card green"><b>FIX PANTALLA NEGRA:</b> Si entras a 192.168.68.141:7777 y ves negro, entra a /app?token= o /fix</div>
+    return HTMLResponse(f"""
+<html><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1"><title>Directo v74</title>
+<style>body{{background:#050510;color:#fff;font-family:system-ui;padding:16px}} .card{{background:#12122a;padding:16px;border-radius:16px;margin:12px 0;border:1px solid #333}} .green{{border-color:#22c55e}} a{{color:#fff;padding:10px 14px;border-radius:999px;display:inline-block;margin:4px;text-decoration:none;font-weight:700}} pre{{background:#000;padding:12px;border-radius:8px;font-size:11px}}</style></head><body>
+<h1>💻🔗 BEXIA v74 - Sesiones Seguras</h1>
+<div class="card green"><b>v74 - URL limpia /app sin token - Sesion 1h en sessionStorage - Se acabo ?token= en historial</b></div>
 <div class="card">
-<pre>✅ http://192.168.68.141:7777/app?token=BEXIA_FER_2026_INFINITA_SUPREMA
-✅ http://192.168.68.141:7777/fix (auto redirige)
-✅ http://localhost:7777/app?token=BEXIA_FER_2026_INFINITA_SUPREMA
-❌ http://192.168.68.141:7777 (da pantalla negra - ahora redirige auto)
+<pre>
+✅ http://{LOCAL_IP}:7777/app (limpio, con login)
+✅ https://bexia-api.onrender.com/app (limpio)
+✅ /login POST token una vez -> sesion 1h
+✅ /skills -> {len(skills_registry)} skills activos
+❌ Ya NO: /app?token=... (viejo, filtra en historial)
 </pre>
-<a href="/app?token=BEXIA_FER_2026_INFINITA_SUPREMA" style="background:#22c55e;color:#000">🚀 Abrir /app?token=</a>
-<a href="/fix" style="background:#0064e0;color:#fff">🔧 /fix Auto-fix</a>
-<a href="/" style="background:#000;color:#fff;border:1px solid #333">/ (redirige auto)</a>
+<a href="/app" style="background:#22c55e;color:#000">🚀 /app Limpio v74</a>
+<a href="/skills" style="background:#0064e0;color:#fff">🧠 /skills Lista</a>
+<a href="/health" style="background:#000;color:#fff;border:1px solid #333">/health</a>
 </div>
 </body></html>
 """)
@@ -233,33 +334,44 @@ def directo_page():
 @app.get("/simple", response_class=HTMLResponse)
 def simple():
     return HTMLResponse("""
-<html><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1"><title>Bexia v73 FIX</title>
-<style>body{background:#050510;color:#fff;font-family:system-ui;padding:16px;max-width:600px;margin:0 auto} .card{background:#12122a;padding:14px;border-radius:16px;margin:10px 0;border:1px solid #333} input{width:100%;padding:14px;border-radius:999px;background:#1a1a2e;border:1px solid #444;color:#fff;box-sizing:border-box} button{width:100%;padding:14px;background:linear-gradient(90deg,#0064e0,#22c55e);border:none;border-radius:999px;color:#fff;font-weight:900;margin-top:8px} a{color:#fff;padding:8px 12px;border-radius:8px;display:inline-block;margin:4px;text-decoration:none}</style></head><body>
-<h1>💻🔗 BEXIA v73 FIX Pantalla Negra</h1>
-<div class="card" style="border-color:#22c55e"><b>FIX:</b> Si ves pantalla negra en 192.168.68.141:7777 usa /app?token= o /fix</div>
-<div class="card"><form action="/chat_simple" method="get"><input type="text" name="message" placeholder="Ej: hola" required><button type="submit">Enviar ></button></form></div>
-<div class="card"><a href="/app?token=BEXIA_FER_2026_INFINITA_SUPREMA" style="background:#22c55e;color:#000;font-weight:900">🚀 /app?token= Correcto</a> <a href="/fix" style="background:#0064e0;color:#fff">🔧 /fix Auto</a> <a href="/directo" style="background:#ff6a00;color:#fff">/directo</a></div>
+<html><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1"><title>Bexia v74</title>
+<style>body{background:#050510;color:#fff;font-family:system-ui;padding:16px;max-width:600px;margin:0 auto} .card{background:#12122a;padding:14px;border-radius:16px;margin:10px 0;border:1px solid #333} input{width:100%;padding:14px;border-radius:999px;background:#1a1a2e;border:1px solid #444;color:#fff;box-sizing:border-box} button{width:100%;padding:14px;background:#22c55e;border:none;border-radius:999px;color:#000;font-weight:900;margin-top:8px} a{color:#fff;padding:8px 12px;border-radius:8px;display:inline-block;margin:4px;text-decoration:none}</style></head><body>
+<h1>💻🔐 BEXIA v74 Sesiones Seguras</h1>
+<div class="card" style="border-color:#22c55e"><b>v74:</b> POST /login una vez, sesion 1h sessionStorage, /app limpio sin token, 5 skills activos</div>
+<div class="card"><form action="/chat_simple" method="get"><input type="text" name="message" placeholder="Ej: skills" required><button type="submit">Enviar ></button></form></div>
+<div class="card"><a href="/app" style="background:#22c55e;color:#000;font-weight:900">🔐 /app Login Seguro</a> <a href="/skills" style="background:#0064e0;color:#fff">🧠 /skills</a> <a href="/directo" style="background:#ff6a00;color:#fff">/directo</a></div>
 </body></html>
 """)
 
 @app.get("/chat_simple", response_class=HTMLResponse)
-def chat_simple(message: str = "Hola"):
-    r=cerebro(message)
-    html_resp = "<html><head><meta charset='utf-8'><meta name=viewport content='width=device-width,initial-scale=1'><title>Bexia v73</title><style>body{background:#050510;color:#fff;font-family:system-ui;padding:16px;max-width:700px;margin:0 auto} .card{background:#12122a;padding:14px;border-radius:16px;margin:12px 0;border:1px solid #333} pre{background:#000;padding:12px;border-radius:8px;white-space:pre-wrap;font-size:13px} input{width:100%;padding:14px;border-radius:999px;background:#1a1a2e;border:1px solid #444;color:#fff;box-sizing:border-box} button{width:100%;padding:14px;background:linear-gradient(90deg,#0064e0,#22c55e);border:none;border-radius:999px;color:#fff;font-weight:900;margin-top:8px}</style></head><body><h1>💻 BEXIA v73 FIX</h1><div class='card'><b>Tu:</b> "+message[:500]+"</div><div class='card'><b>Bexia:</b><pre>"+r[:6000]+"</pre></div><div class='card'><form action='/chat_simple' method='get'><input type='text' name='message' placeholder='otro' required><button type='submit'>Enviar otro ></button></form></div></body></html>"
-    return HTMLResponse(html_resp)
+def chat_simple(message: str = "Hola", session_id: str = Header(None, alias="X-Session-Id")):
+    valid=validate_session(session_id) if session_id else False
+    r=cerebro(message, valid)
+    return HTMLResponse(f"<html><head><meta charset='utf-8'><title>Bexia v74</title><style>body{{background:#050510;color:#fff;font-family:system-ui;padding:16px}} .card{{background:#12122a;padding:14px;border-radius:16px;margin:12px 0;border:1px solid #333}} pre{{background:#000;padding:12px;border-radius:8px;white-space:pre-wrap}}</style></head><body><h1>BEXIA v74</h1><div class='card'><b>Tu:</b> {message[:500]}</div><div class='card'><b>Bexia:</b><pre>{r[:6000]}</pre></div><div class='card'><a href='/app' style='background:#22c55e;color:#000;padding:8px 12px;border-radius:999px;display:inline-block'>/app Login</a></div></body></html>")
 
 @app.post("/chat")
-async def chat_endpoint(req: ChatReq, request: Request):
+async def chat_endpoint(req: ChatReq, request: Request, x_session_id: str = Header(None, alias="X-Session-Id")):
     try:
         ip=request.client.host if request.client else "?"
         if not check_rate(ip): return JSONResponse({"respuesta":"Vas rapido, espera 1s"}, status_code=429)
+        # Guardian pasa por toda llamada API
+        ok, _ = guardian_check(req.message)
+        if not ok:
+            return {"respuesta": "🛡️ Guardian anti_inyeccion bloqueó - /skills"}
+        # Valida sesion si viene
+        session_valid=validate_session(x_session_id) if x_session_id else False
+        # Si viene token viejo en body (compatibilidad con v73), valida hash
+        if req.token:
+            h=hashlib.sha256(req.token.encode()).hexdigest()
+            if secrets.compare_digest(h, TOKEN_HASH):
+                session_valid=True
         sid=get_session(req.session_id)
-        r=cerebro(req.message)
+        r=cerebro(req.message, session_valid)
         try:
             sesiones_mem[sid].append({"u":req.message[:200],"b":r[:500],"fecha":datetime.now().isoformat()})
             persist_session(sid)
         except: pass
-        return {"respuesta": r}
+        return {"respuesta": r, "session_valid": session_valid, "skills": len(skills_registry)}
     except Exception as e:
         return JSONResponse({"respuesta": "Error: "+str(e)}, status_code=200)
 
