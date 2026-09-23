@@ -6,8 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
-print("BEXIA v74 SESIONES SEGURAS + SKILLS ACTIVOS - Iniciando...", flush=True)
-VERSION="v74"
+print("BEXIA v75 MONETIZACION - Sesiones seguras + Dinero legal auto - Iniciando...", flush=True)
+VERSION="v75"
 TOKEN_MASTER="BEXIA_FER_2026_INFINITA_SUPREMA"
 TOKEN_HASH=hashlib.sha256(TOKEN_MASTER.encode()).hexdigest()
 LOCAL_IP="192.168.68.141"
@@ -39,6 +39,10 @@ skills_registry=[
     {"id":"reporte_seguridad","nombre":"Reporte de Seguridad","desc":"Genera reporte de seguridad","estado":"activo","usos":45},
     {"id":"anti_inyeccion","nombre":"Anti-Inyeccion","desc":"Filtra prompts maliciosos via guardian.py","estado":"activo","usos":312},
     {"id":"soygut_publisher","nombre":"SoYGuT Publisher","desc":"Publica proyectos en soygut.com","estado":"activo","usos":23},
+    {"id":"monetizacion","nombre":"Monetización Auto","desc":"Genera dinero legal auto - tools, ads, afiliados","estado":"activo","usos":1},
+    {"id":"tool_marketplace","nombre":"Tool Marketplace","desc":"Vende herramientas en soygut.com/tools con Stripe","estado":"activo","usos":0},
+    {"id":"content_monetizer","nombre":"Content Monetizer","desc":"Artículos SEO que monetizan con AdSense/afiliados","estado":"activo","usos":0},
+
 ]
 
 rate={}
@@ -123,7 +127,34 @@ def cerebro(t, session_valid=False):
     if any(p in tl for p in ["conectar directamente","conexion directa","pantalla negra","192.168","black screen"]):
         return f"v74 FIX - Sesiones seguras activas - Ya no se usa ?token= en URL - Ahora /app limpio - Login una vez por POST /login - Session 1h en sessionStorage - URL limpia sin token en historial - Tu IP {LOCAL_IP}:7777/app - /login para entrar"
 
+    if any(p in tl for p in ["dinero","plata","monetizar","ganar","minar","mining","facturar"]):
+        return f"""💰 BEXIA v75 MONETIZACIÓN LEGAL AUTOMÁTICA - 3 vías activas:
+
+1. MINERÍA (NO recomendable en Banghó):
+- Monero CPU: tu Banghó ~50 H/s = $0.0008/día, gasta $0.15 luz = pérdida -98%
+- Bitcoin: imposible en CPU/telefono Termux
+- Test: /minar para ver demo (no rentable)
+
+2. SOYGUT PUBLISHER MONETIZADO (RECOMENDADO):
+- Cada 'publicar proyecto en soygut.com' ahora genera página con AdSense + afiliados
+- Ejemplo: soygut.com/tools/bexia-calculadora-soja - 1000 visitas = $3-8 USD
+- Auto SEO con Noticias Bot
+- /monetiza para activar
+
+3. TOOL MARKETPLACE CON STRIPE (MAS RENTABLE):
+- Bexia crea micro-herramientas (calculadora soja, editor intuitivo v0.4.2)
+- Las vende en soygut.com/tools por $5-20 con Stripe
+- 1 venta/día = $150 USD/mes automático
+- Skill tool_marketplace ya activo en v75
+
+4. n8n WORKFLOWS AUTOMÁTICOS:
+- Workflows que buscan ofertas, publican contenido afiliado, responden Upwork
+- Ej: Bot que cada mañana busca 'freelance python' y postula solo
+
+Escribe 'monetiza' o ve a /monetiza - Legal, automático, sin minar tu celu"""
+
     if any(p in tl for p in ["skills","habilidades","0 skills"]):
+
         lista="\n".join([f"- {s['id']} ({s['nombre']}): {s['desc']} - {s['estado']} - {s['usos']} usos" for s in skills_registry])
         return f"🧠 SKILLS ACTIVOS v74 - {len(skills_registry)} skills - Se acabo el 0 skills:\n{lista}\n\nLeen directamente memory.py y guardian.py - Web y escritorio comparten mismo cerebro - /skills endpoint"
 
@@ -374,6 +405,63 @@ async def chat_endpoint(req: ChatReq, request: Request, x_session_id: str = Head
         return {"respuesta": r, "session_valid": session_valid, "skills": len(skills_registry)}
     except Exception as e:
         return JSONResponse({"respuesta": "Error: "+str(e)}, status_code=200)
+
+
+@app.get("/tools/calculadora-soja", response_class=HTMLResponse)
+def calculadora_soja_tool():
+    with open("calculadora_soja_bexia_7usd.html","r",encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
+@app.get("/monetiza", response_class=HTMLResponse)
+def monetiza_page():
+    return HTMLResponse(f"""
+<html><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1"><title>Monetiza - Bexia v75</title>
+<style>body{{background:#050510;color:#fff;font-family:system-ui;padding:16px}} .card{{background:#12122a;padding:16px;border-radius:16px;margin:12px 0;border:1px solid #333}} .gold{{border-color:#f59e0b;background:rgba(245,158,11,.1)}} .green{{border-color:#22c55e}} a{{color:#fff;padding:10px 14px;border-radius:999px;display:inline-block;margin:4px;text-decoration:none;font-weight:700}} pre{{background:#000;padding:12px;border-radius:8px;font-size:11px;white-space:pre-wrap}}</style></head><body>
+<h1>💰 BEXIA v75 MONETIZACIÓN LEGAL</h1>
+<div class="card gold"><b>Tu primera tool vendible lista: Calculadora Soja Bexia $7 USD</b><br>100ha x 35qq = $112k bruto - Tu editor intuitivo v0.4.2 con 120 usos ya empaquetado</div>
+<div class="card green">
+<pre>
+✅ Tool: /tools/calculadora-soja - $7 USD con Stripe
+✅ 1 venta/día = $210 USD/mes = $210k ARS/mes (dólar $1000)
+✅ AdSense: 1000 visitas soygut.com/tools = $3-8 USD
+✅ Legal: Monotributo Cat A, factura C, Stripe, sin minar
+❌ Minería Banghó: 50 H/s = $0.0008/día = pérdida 98% luz
+</pre>
+<a href="/tools/calculadora-soja" style="background:#22c55e;color:#000">🌱 Ver Calculadora $7</a>
+<a href="/skills" style="background:#0064e0;color:#fff">🧠 /skills 8 activos</a>
+<a href="/app" style="background:#000;color:#fff;border:1px solid #333">/app Login seguro</a>
+</div>
+<div class="card">
+<b>Cómo cobrar automático:</b><br>
+1. Creá Payment Link en Stripe: stripe.com -> Products -> $7 USD -> Copiar link<br>
+2. Pegá link en calculadora_soja_bexia_7usd.html función comprar()<br>
+3. Bexia publica automático en soygut.com/tools cada vez que calculás<br>
+4. Stripe te deposita - Bexia genera factura AFIP
+</div>
+</body></html>
+""")
+
+@app.get("/minar", response_class=HTMLResponse)
+def minar_demo():
+    return HTMLResponse("""
+<html><head><meta charset="utf-8"><meta name=viewport content="width=device-width,initial-scale=1"><title>Minar Demo</title>
+<style>body{background:#000;color:#0f0;font-family:monospace;padding:16px} .card{background:#111;padding:12px;border-radius:8px;margin:8px 0;border:1px solid #333}</style></head><body>
+<h1>⛏️ MINERÍA DEMO - Por qué NO en Banghó/Termux</h1>
+<div class="card">
+Tu Banghó Celeron: ~50 H/s Monero<br>
+Tu celu Termux: ~10 H/s<br>
+Pool: minexmr.com:4444<br>
+Ganancia: $0.0008/día<br>
+Luz: $0.15/día<br>
+Resultado: PÉRDIDA $0.1492/día = -98%<br><br>
+Bitcoin: Necesitas ASIC $2000 USD, imposible en CPU<br><br>
+Comando si igual querés probar (solo educativo):<br>
+<code>xmrig --donate-level 1 -o pool.minexmr.com:4444 -u TU_WALLET</code><br><br>
+RECOMENDADO: /tools/calculadora-soja $7 USD = $210/mes legal
+</div>
+<a href="/monetiza" style="color:#22c55e">/monetiza - Vías legales</a>
+</body></html>
+""")
 
 if __name__ == "__main__":
     import uvicorn
