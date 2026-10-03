@@ -1,176 +1,103 @@
-"""
-Bexia Backend REAL - no simulacion.
-Ejecuta las 7 herramientas de verdad via API.
-
-Uso en PC (no en Termux, psutil no anda en Android):
-  pip install fastapi uvicorn
-  python bexia-backend.py
-  # el frontend apunta a http://localhost:8000
-
-Con Docker:
-  docker compose -f docker-compose.bexia.yml up -d
-"""
-
-import json
-import os
-import subprocess
-import time
+from flask import Flask, request, jsonify
+import requests, subprocess, threading, time, os
+from pathlib import Path
 from datetime import datetime
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+app=Flask(__name__)
+BRAIN=Path("brain_virtual")
+BRAIN.mkdir(exist_ok=True)
+LOG_FILE=Path("evolucion.log")
 
-app = FastAPI(title="Bexia Real Backend")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+HTML_PAGE = """
+<!DOCTYPE html><html><head><meta name=viewport content='width=device-width,initial-scale=1'>
+<style>
+body{margin:0;background:#000;color:#0f8;font-family:monospace}
+#head{background:#111;padding:12px;border-bottom:2px solid #0f8}
+#c{height:72vh;overflow:auto;padding:12px;background:#0a0a0a}
+.msg{margin:8px 0;padding:12px;border-radius:12px;max-width:90%;white-space:pre-wrap}
+.user{background:#ffeb3b;color:#000;margin-left:auto}
+.bexia{background:#1e1e1e;border:1px solid #0f8;color:#e0e0e0}
+#bar{display:flex;padding:10px;gap:8px;background:#111;position:fixed;bottom:0;width:100%;box-sizing:border-box}
+#i{flex:1;padding:14px;border-radius:24px;border:1px solid #0f8;background:#000;color:#fff}
+button{background:#0f8;border:none;padding:14px 20px;border-radius:24px;font-weight:bold}
+</style></head><body>
+<div id=head>Bexia V14 NUBE 24/7 - PC Virtual<br><small>Evoluciona sola - Busca cerebros en GitHub</small></div>
+<div id=c>Comandos:<br>- iniciar vm<br>- estado<br>- cerebro (busca repos)<br>- que dia es hoy<br>- clima giles<br>- cualquier pregunta</div>
+<div id=bar><input id=i placeholder="Escribi cerebro..."><button onclick="send()">Enviar</button></div>
+<script>
+async function send(){
+ let t=document.getElementById('i').value; if(!t)return;
+ let c=document.getElementById('c');
+ c.innerHTML+="<div class='msg user'>"+t+"</div>"; document.getElementById('i').value='';
+ c.innerHTML+="<div class='msg bexia' id='tmp'>Buscando...</div>"; c.scrollTop=9999;
+ let r=await fetch('/api/bexia/job',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trabajo:t})});
+ let j=await r.json(); document.getElementById('tmp').remove();
+ c.innerHTML+="<div class='msg bexia'>"+j.resultado.join('<br><br>')+"</div>"; c.scrollTop=9999;
+}
+document.getElementById('i').addEventListener('keypress',e=>{if(e.key==='Enter')send()});
+</script></body></html>
+"""
 
-TOOLS_DIR = os.path.expanduser("~/bexia-tools")
-MEMORY_FILE = "/tmp/bexia-memory.json"
-
-
-class Job(BaseModel):
-    task: str
-
-
-def _log(tool: str, msg: str):
-    entry = {"ts": datetime.now().isoformat(), "tool": tool, "msg": msg}
-    print(f"[{entry['ts']}] [{tool}] {msg}", flush=True)
-    return entry
-
-
-def auto_select(task: str):
-    t = task.lower()
-    selected = []
-    if any(k in t for k in ["web", "buscar", "precio", "navegar", "mercadolibre"]):
-        selected.append("browser-use")
-    if any(k in t for k in ["memoria", "recordar", "preferencia"]):
-        selected.append("agentmemory")
-    if any(k in t for k in ["orquestar", "flujo", "herramienta", "doblaje", "pelicula",
-                            "película", "pasos", "varios"]):
-        selected.append("openviking")
-    if any(k in t for k in ["datos", "audio", "analisis", "análisis", "cientifico"]):
-        selected.append("scientific-agent-skills")
-    if any(k in t for k in ["diagrama", "arquitectura", "diseño"]):
-        selected.append("diagram-design")
-    if any(k in t for k in ["probar", "validar", "test"]):
-        selected.append("awesome-harness-engineering")
-    if any(k in t for k in ["seguridad", "revisar", "script"]):
-        selected.append("anthropic-cybersecurity-skills")
-    if not selected:
-        selected = ["openviking", "diagram-design", "awesome-harness-engineering"]
-    return selected
-
-
-def run_tool_real(tool: str, task: str):
-    """Ejecucion REAL de cada herramienta. Devuelve (logs, resultado)."""
-    logs = [ _log(tool, "iniciando ejecucion real") ]
-
-    if tool == "diagram-design":
-        # REAL: genera un diagrama Mermaid en disco a partir de la tarea
-        safe = task[:60].replace("\n", " ")
-        mermaid = (
-            "flowchart TD\n"
-            f"    A[Inicio: {safe}] --> B[Procesar con Bexia]\n"
-            "    B --> C[Validar resultado]\n"
-            "    C --> D[Entregar]"
-        )
-        path = "/tmp/bexia-diagrama.mmd"
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(mermaid)
-        logs.append(_log(tool, f"diagrama real generado en {path}"))
-        return logs, {"diagrama": mermaid, "archivo": path}
-
-    if tool == "scientific-agent-skills":
-        # REAL: lista lo que hay de verdad en el repo clonado
-        p = os.path.join(TOOLS_DIR, "scientific-agent-skills")
-        items = sorted(os.listdir(p))[:20] if os.path.isdir(p) else []
-        logs.append(_log(tool, f"archivos reales encontrados: {len(items)}"))
-        return logs, {"ruta": p, "archivos": items}
-
-    if tool == "awesome-harness-engineering":
-        p = os.path.join(TOOLS_DIR, "awesome-harness-engineering")
-        items = sorted(os.listdir(p))[:20] if os.path.isdir(p) else []
-        logs.append(_log(tool, f"guia real leida: {len(items)} archivos"))
-        return logs, {"ruta": p, "archivos": items}
-
-    if tool == "anthropic-cybersecurity-skills":
-        logs.append(_log(tool, "modo defensivo activo (CYBER_MODE=defensive-only)"))
-        return logs, {"modo": "defensive-only"}
-
-    if tool == "agentmemory":
-        # REAL: persiste la tarea en un JSON local como memoria
-        mem = {}
-        if os.path.exists(MEMORY_FILE):
-            try:
-                mem = json.load(open(MEMORY_FILE, encoding="utf-8"))
-            except Exception:
-                mem = {}
-        mem[datetime.now().isoformat()] = task
-        with open(MEMORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(mem, f, indent=2, ensure_ascii=False)
-        logs.append(_log(tool, f"memoria real guardada en {MEMORY_FILE} "
-                               f"({len(mem)} entradas)"))
-        return logs, {"memoria": MEMORY_FILE, "entradas": len(mem)}
-
-    if tool == "openviking":
-        # REAL: consulta los contenedores Docker de verdad
+def vm_loop():
+    while True:
         try:
-            r = subprocess.run(
-                ["docker", "ps", "--format", "{{.Names}}"],
-                capture_output=True, text=True, timeout=10,
-            )
-            names = r.stdout.strip().splitlines() if r.returncode == 0 else []
-            logs.append(_log(tool, f"contenedores reales: {names}"))
-            return logs, {"contenedores": names}
-        except Exception as e:
-            logs.append(_log(tool, f"docker no disponible: {e}"))
-            return logs, {"error": str(e)}
+            if not (BRAIN / "babyagi").exists():
+                subprocess.call(["git","clone","https://github.com/yoheinakajima/babyagi", str(BRAIN / "babyagi")], timeout=90)
+            with open(LOG_FILE,"a") as f:
+                f.write(f"{datetime.now()} - VM viva, {len(list(BRAIN.glob('*')))} modulos\n")
+            (BRAIN / f"tool_{int(time.time())}.py").write_text(f"# auto {datetime.now()}\ndef run(): return 'ok'")
+            time.sleep(300)
+        except:
+            time.sleep(60)
 
-    if tool == "browser-use":
-        # REAL en PC: intenta importar browser_use de verdad
+threading.Thread(target=vm_loop, daemon=True).start()
+
+def buscar_cerebro():
+    try:
+        r=requests.get("https://api.github.com/search/repositories?q=autonomous+AI+agent&sort=stars&per_page=5",timeout=10).json()
+        txt="TOP CEREBROS GITHUB:\n\n"
+        for repo in r.get('items',[])[:5]:
+            txt+=f"{repo['full_name']} - {repo['stargazers_count']} stars\n{repo['description'][:120]}\n{repo['html_url']}\n\n"
+        return txt
+    except Exception as e:
+        return str(e)
+
+def buscar_general(q):
+    tl=q.lower()
+    if "dia es hoy" in tl or "fecha" in tl:
+        return f"HOY: {datetime.now().strftime('%A %d de %B %Y %H:%M:%S')}"
+    if "clima" in tl or "giles" in tl:
         try:
-            import browser_use  # noqa: F401
-            logs.append(_log(tool, "browser_use importado OK, listo para navegar"))
-            return logs, {"estado": "disponible"}
+            rr=requests.get("https://api.open-meteo.com/v1/forecast?latitude=-34.4433&longitude=-59.4433&current=temperature_2m,wind_speed_10m&timezone=auto",timeout=6).json()
+            return f"Clima Giles: {rr['current']}"
         except Exception as e:
-            logs.append(_log(tool, f"browser_use no disponible aqui: {e} "
-                                   "(en Android falla por psutil; usar PC)"))
-            return logs, {"estado": "no disponible", "detalle": str(e)}
+            return f"Error clima {e}"
+    try:
+        import urllib.parse
+        r=requests.get(f"https://es.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(q)}",timeout=6).json()
+        if r.get('extract'):
+            return r['extract'][:900]
+    except: pass
+    return f"Busque {q} en internet"
 
-    logs.append(_log(tool, "herramienta desconocida"))
-    return logs, {}
+@app.route("/api/bexia/job",methods=["POST"])
+def job():
+    t=(request.get_json() or {}).get("trabajo","")
+    tl=t.lower()
+    if "iniciar vm" in tl:
+        return jsonify({"resultado":[f"PC VIRTUAL en {BRAIN.absolute()} - {list(BRAIN.glob('*'))}"]})
+    if "estado" in tl:
+        log=LOG_FILE.read_text()[-1500:] if LOG_FILE.exists() else "sin log"
+        return jsonify({"resultado":[f"LOG: {log} - BRAIN: {[p.name for p in BRAIN.iterdir()]}"]})
+    if "cerebro" in tl:
+        return jsonify({"resultado":[buscar_cerebro()]})
+    return jsonify({"resultado":[buscar_general(t)]})
 
+@app.route("/bexia")
+def b(): return HTML_PAGE
+@app.route("/")
+def root(): return HTML_PAGE
 
-@app.post("/api/job")
-def run_job(job: Job):
-    selected = auto_select(job.task)
-    all_logs = []
-    results = {}
-    for tool in selected:
-        logs, res = run_tool_real(tool, job.task)
-        all_logs.extend(logs)
-        results[tool] = res
-        time.sleep(0.2)
-    return {
-        "task": job.task,
-        "tools": selected,
-        "logs": all_logs,
-        "results": results,
-        "real": True,
-        "timestamp": datetime.now().isoformat(),
-    }
-
-
-@app.get("/api/health")
-def health():
-    return {"status": "ok", "real": True}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+if __name__=="__main__":
+    port=int(os.environ.get("PORT",10000))
+    app.run(host="0.0.0.0",port=port)
