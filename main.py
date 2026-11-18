@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import List, Dict, Optional
 import json
 
-# === CONFIG 【entity-WHATSAPP¦canonical_name=WhatsApp】 - Se pone en Render como Environment Variables ===
+# === CONFIG WHATSAPP ===
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "bexia123")
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID", "")
