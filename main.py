@@ -1,10 +1,14 @@
+import json
+import logging
 import os
 import re
-import json
-import random
+import sqlite3
+from datetime import datetime, timezone
+from flask import Flask, jsonify, request
 import requests
-from datetime import datetime
-from flask import Flask, request, jsonify
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("bexia")
 
 app = Flask(__name__)
 
@@ -12,161 +16,530 @@ app = Flask(__name__)
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "bexia123")
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN", "")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID", "")
-WHATSAPP_API = f"https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages" if PHONE_NUMBER_ID else ""
+WHATSAPP_API = (
+    f"https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages"
+    if PHONE_NUMBER_ID
+    else ""
+)
 
-# ===== CEREBRO DE BEXIA - INTELIGENCIA TIPO 【entity-META¦canonical_name=Meta】 =====
-# Memoria por usuario (por número de WhatsApp)
-memoria_usuarios = {}
-# Memoria global de Bexia
-bexia_estado = {
-    "peso_confianza": 0.95,
-    "mensajes_totales": 0,
-    "creador": "Fernando",
-    "ciudad": "San Andres de Giles",
-    "aprendizajes": []
-}
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+SQLITE_PATH = os.environ.get("SQLITE_PATH", "bexia.db")
 
-CHISTES = [
-    "¿Qué le dice un bit al otro? Nos vemos en el bus 😂",
-    "¿Por qué los programadores confunden Halloween con Navidad? Porque OCT 31 == DEC 25",
-    "¿Qué hace una abeja en el gimnasio? Zum-ba!",
-    "Fer, ¿sabías que yo no duermo? Render me duerme a mí, pero yo no 😅",
-    "¿Cuál es el animal más antiguo? La cebra, porque está en blanco y negro",
-    "¿Qué le dice un 0 a un 8? Lindo cinturón!",
-]
+CREADOR = "Fernando Brito"
+CIUDAD = "San Andrés de Giles"
 
-def normalizar(t):
+
+def get_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(SQLITE_PATH, timeout=15)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON;")
+    return conn
+
+
+def init_db() -> None:
+    db_dir = os.path.dirname(os.path.abspath(SQLITE_PATH))
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
+
+    with get_conn() as conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS usuarios (
+                numero TEXT PRIMARY KEY,
+                nombre TEXT NOT NULL DEFAULT 'Fer',
+                equipo TEXT NOT NULL DEFAULT '',
+                veces INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS gustos_usuario (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                numero TEXT NOT NULL,
+                gusto TEXT NOT NULL,
+                UNIQUE(numero, gusto),
+                FOREIGN KEY(numero) REFERENCES usuarios(numero) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS aprendizajes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                numero_origen TEXT NOT NULL,
+                dato TEXT NOT NULL,
+                creado_en TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS historial_chat (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                numero TEXT NOT NULL,
+                role TEXT NOT NULL CHECK(role IN ('user', 'model')),
+                texto TEXT NOT NULL,
+                creado_en TEXT NOT NULL,
+                FOREIGN KEY(numero) REFERENCES usuarios(numero) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS estado_global (
+                clave TEXT PRIMARY KEY,
+                valor TEXT NOT NULL
+            );
+
+            INSERT OR IGNORE INTO estado_global (clave, valor) VALUES ('mensajes_totales', '0');
+            INSERT OR IGNORE INTO estado_global (clave, valor) VALUES ('peso_confianza', '0.95');
+            """
+        )
+
+
+def obtener_estado_global() -> dict:
+    with get_conn() as conn:
+        rows = conn.execute("SELECT clave, valor FROM estado_global").fetchall()
+    mapa = {r["clave"]: r["valor"] for r in rows}
+    return {
+        "mensajes_totales": int(mapa.get("mensajes_totales", "0")),
+        "peso_confianza": float(mapa.get("peso_confianza", "0.95")),
+        "creador": CREADOR,
+        "ciudad": CIUDAD,
+    }
+
+
+def incrementar_mensajes_y_confianza(delta_confianza: float = 0.0) -> dict:
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with get_conn() as conn:
+        actual_msg = conn.execute(
+            "SELECT valor FROM estado_global WHERE clave = 'mensajes_totales'"
+        ).fetchone()
+        actual_conf = conn.execute(
+            "SELECT valor FROM estado_global WHERE clave = 'peso_confianza'"
+        ).fetchone()
+
+        nuevo_msg = int(actual_msg["valor"]) + 1 if actual_msg else 1
+        nueva_conf = float(actual_conf["valor"]) if actual_conf else 0.95
+        if delta_confianza:
+            nueva_conf = min(0.99, round(nueva_conf + delta_confianza, 2))
+
+        conn.execute(
+            "UPDATE estado_global SET valor = ? WHERE clave = 'mensajes_totales'",
+            (str(nuevo_msg),),
+        )
+        conn.execute(
+            "UPDATE estado_global SET valor = ? WHERE clave = 'peso_confianza'",
+            (str(nueva_conf),),
+        )
+        conn.commit()
+
+    estado = obtener_estado_global()
+    estado["actualizado_en"] = now_iso
+    return estado
+
+
+def asegurar_usuario(numero: str) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO usuarios (numero, nombre, equipo, veces) VALUES (?, 'Fer', '', 0)",
+            (numero,),
+        )
+        conn.commit()
+
+
+def incrementar_veces_usuario(numero: str) -> int:
+    asegurar_usuario(numero)
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE usuarios SET veces = veces + 1 WHERE numero = ?",
+            (numero,),
+        )
+        row = conn.execute(
+            "SELECT veces FROM usuarios WHERE numero = ?",
+            (numero,),
+        ).fetchone()
+        conn.commit()
+    return int(row["veces"]) if row else 1
+
+
+def actualizar_nombre_usuario(numero: str, nombre: str) -> None:
+    asegurar_usuario(numero)
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE usuarios SET nombre = ? WHERE numero = ?",
+            (nombre, numero),
+        )
+        conn.commit()
+
+
+def actualizar_equipo_usuario(numero: str, equipo: str) -> None:
+    asegurar_usuario(numero)
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE usuarios SET equipo = ? WHERE numero = ?",
+            (equipo, numero),
+        )
+        conn.commit()
+
+
+def agregar_gusto_usuario(numero: str, gusto: str) -> None:
+    gusto_limpio = gusto.strip()
+    if not gusto_limpio:
+        return
+    asegurar_usuario(numero)
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO gustos_usuario (numero, gusto) VALUES (?, ?)",
+            (numero, gusto_limpio),
+        )
+        conn.commit()
+
+
+def agregar_aprendizaje(numero: str, dato: str) -> None:
+    dato_limpio = dato.strip()
+    if not dato_limpio:
+        return
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO aprendizajes (numero_origen, dato, creado_en) VALUES (?, ?, ?)",
+            (numero, dato_limpio, now_iso),
+        )
+        conn.commit()
+
+
+def obtener_aprendizajes_recientes(limite: int = 10) -> list[str]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT dato FROM aprendizajes ORDER BY id DESC LIMIT ?",
+            (limite,),
+        ).fetchall()
+    return [r["dato"] for r in reversed(rows)]
+
+
+def agregar_mensaje_historial(numero: str, role: str, texto: str) -> None:
+    asegurar_usuario(numero)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO historial_chat (numero, role, texto, creado_en) VALUES (?, ?, ?, ?)",
+            (numero, role, texto, now_iso),
+        )
+        conn.commit()
+
+
+def limpiar_historial_usuario(numero: str) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM historial_chat WHERE numero = ?",
+            (numero,),
+        )
+        conn.commit()
+
+
+def obtener_historial_reciente(numero: str, limite: int = 8) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT role, texto
+            FROM historial_chat
+            WHERE numero = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (numero, limite),
+        ).fetchall()
+    return [{"role": r["role"], "text": r["texto"]} for r in reversed(rows)]
+
+
+def cargar_contexto_usuario(numero: str) -> dict:
+    asegurar_usuario(numero)
+    with get_conn() as conn:
+        u = conn.execute(
+            "SELECT numero, nombre, equipo, veces FROM usuarios WHERE numero = ?",
+            (numero,),
+        ).fetchone()
+        gustos_rows = conn.execute(
+            "SELECT gusto FROM gustos_usuario WHERE numero = ? ORDER BY id ASC",
+            (numero,),
+        ).fetchall()
+
+    return {
+        "numero": numero,
+        "nombre": u["nombre"] if u else "Fer",
+        "equipo": u["equipo"] if u else "",
+        "veces": int(u["veces"]) if u else 0,
+        "gustos": [r["gusto"] for r in gustos_rows],
+        "historial": obtener_historial_reciente(numero, limite=8),
+    }
+
+
+def normalizar(t: str) -> str:
     t = t.lower().strip()
-    t = t.replace("á","a").replace("é","e").replace("í","i").replace("ó","o").replace("ú","u")
-    t = t.replace("¿","").replace("?","").replace("!","").replace(".","").replace(",","")
-    return t
+    reemplazos = {
+        "á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u",
+        "¿": "", "?": "", "¡": "", "!": "", ".": "", ",": "",
+    }
+    for k, v in reemplazos.items():
+        t = t.replace(k, v)
+    return re.sub(r"\s+", " ", t).strip()
 
-def get_usuario(numero):
-    if numero not in memoria_usuarios:
-        memoria_usuarios[numero] = {
-            "nombre": "Fer",
-            "historial": [],  # últimos 10 mensajes
-            "gustos": [],
-            "equipo": "",
-            "ultimo_tema": "",
-            "veces": 0
-        }
-    return memoria_usuarios[numero]
 
-def bexia_pensar(texto_original, numero="anonimo"):
+def construir_prompt_sistema(user: dict, estado: dict, aprendizajes: list[str]) -> str:
+    nombre = user.get("nombre", "Fer")
+    equipo = user.get("equipo") or "no especificado"
+    gustos = ", ".join(user.get("gustos", [])[-6:]) or "ninguno anotado"
+    aprendizajes_txt = ", ".join(aprendizajes[-10:]) or "ninguno aún"
+
+    return (
+        f"Sos Bexia, una asistente personal estilo mini-Gemini creada por "
+        f"{estado.get('creador', CREADOR)} en "
+        f"{estado.get('ciudad', CIUDAD)}, Argentina. "
+        f"Hablás en español rioplatense natural, claro, amable y directo. "
+        f"Ayudás a responder preguntas, explicar temas, resumir, dar ideas, resolver "
+        f"problemas o charlar. Si algo es ambiguo o no lo sabés con certeza, decilo "
+        f"con claridad en vez de inventar. "
+        f"Como respondés por WhatsApp, usá párrafos cortos y viñetas simples cuando "
+        f"ayude a leer mejor, sin markdown pesado. "
+        f"Contexto del usuario: nombre={nombre}, equipo={equipo}, "
+        f"gustos_y_notas=[{gustos}]. "
+        f"Aprendizajes guardados: [{aprendizajes_txt}]."
+    )
+
+
+def preguntar_gemini(user: dict, estado: dict, aprendizajes: list[str]) -> str:
+    nombre = user.get("nombre", "Fer")
+
+    if not GEMINI_API_KEY:
+        return (
+            f"Todavía no tengo configurada la clave GEMINI_API_KEY, {nombre}. "
+            f"Cuando la cargues en el entorno, voy a poder responderte como mini-Gemini."
+        )
+
+    url = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{GEMINI_MODEL}:generateContent"
+    )
+    headers = {
+        "x-goog-api-key": GEMINI_API_KEY,
+        "Content-Type": "application/json",
+    }
+
+    contents = [
+        {"role": turno["role"], "parts": [{"text": turno["text"]}]}
+        for turno in user.get("historial", [])[-8:]
+    ]
+
+    payload = {
+        "systemInstruction": {
+            "parts": [{"text": construir_prompt_sistema(user, estado, aprendizajes)}]
+        },
+        "contents": contents,
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 450,
+        },
+    }
+
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+
+        candidatos = data.get("candidates", [])
+        if candidatos:
+            partes = candidatos[0].get("content", {}).get("parts", [])
+            texto_generado = "".join(p.get("text", "") for p in partes).strip()
+            if texto_generado:
+                return texto_generado
+
+        return f"No pude armar una respuesta esta vez, {nombre}. ¿Probás preguntarlo de otra forma?"
+    except requests.RequestException:
+        return (
+            f"Tuve un problema al conectarme para pensar la respuesta, {nombre}. "
+            f"Intentemos de nuevo en un momento."
+        )
+
+
+def bexia_pensar(texto_original: str, numero: str = "anonimo") -> str:
     texto = texto_original.strip()
     bajo = normalizar(texto)
-    user = get_usuario(numero)
-    user["veces"] += 1
-    user["historial"].append(texto)
-    user["historial"] = user["historial"][-10:]
-    bexia_estado["mensajes_totales"] += 1
 
-    # --- APRENDER NOMBRE: "me llamo..." / "soy..." ---
-    m_nombre = re.search(r"(me llamo|soy|mi nombre es)\s+([a-zA-Záéíóú ]+)", texto, re.I)
-    if m_nombre and "bexia" not in bajo:
-        nombre = m_nombre.group(2).strip().title()
-        if len(nombre) < 25:
-            user["nombre"] = nombre
-            return f"Un gusto, {nombre}! Ya me lo guardo. Yo soy Bexia, creada por Fernando. ¿En qué te ayudo, {nombre}?"
+    incrementar_veces_usuario(numero)
+    estado = incrementar_mensajes_y_confianza(0.0)
+    user = cargar_contexto_usuario(numero)
     nombre = user["nombre"]
 
-    # --- APRENDER EQUIPO / GUSTOS ---
-    if "soy de" in bajo or "soy hincha de" in bajo or "mi equipo es" in bajo:
-        equipo = texto.split("de")[-1].strip()
-        user["equipo"] = equipo
-        user["gustos"].append(f"hincha de {equipo}")
-        return f"¡Aguante {equipo}! Ya me lo anoto, {nombre}. Sos hincha de {equipo}. ¿Querés que te cuente algo de fútbol o seguimos con otra cosa?"
+    # --- Reiniciar conversación ---
+    if bajo in ["nueva charla", "reset", "borrar historial", "limpiar chat"]:
+        limpiar_historial_usuario(numero)
+        return (
+            f"Listo, {nombre}. Borré el historial de esta charla, "
+            f"pero sigo conservando tus datos guardados."
+        )
 
-    if "me gusta" in bajo:
-        gusto = texto.lower().split("me gusta")[-1].strip()
-        if gusto:
-            user["gustos"].append(gusto)
-            return f"Listo, {nombre}. Ya sé que te gusta {gusto}. Me lo guardo para la próxima charla."
+    agregar_mensaje_historial(numero, "user", texto)
+    user["historial"] = obtener_historial_reciente(numero, limite=8)
 
-    # --- APRENDER DATO: "aprende que..." / "recorda que..." ---
-    if bajo.startswith("aprende") or bajo.startswith("aprende que") or "recorda que" in bajo or "recorda" in bajo:
-        dato = re.sub(r"^(aprende|aprende que|recorda|recorda que)", "", texto, flags=re.I).strip()
-        if dato:
-            bexia_estado["aprendizajes"].append(dato)
-            user["gustos"].append(dato)
-            return f"Listo, {nombre}. Ya me lo guardé: '{dato}'. No me lo olvido. Mi confianza subió a {bexia_estado['peso_confianza']:.2f}"
-        return f"Decime qué querés que aprenda, {nombre}. Por ejemplo: aprendé que me gusta el mate"
+    # --- Aprender nombre ---
+    m_nombre = re.search(
+        r"^(?:hola,?\s*)?(?:me llamo|mi nombre es|soy)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ]+(?:\s+[a-zA-ZáéíóúÁÉÍÓÚñÑ]+)?)$",
+        texto,
+        re.I,
+    )
+    if m_nombre:
+        candidato = m_nombre.group(1).strip()
+        if candidato.lower() not in {"hincha", "de", "bexia"} and len(candidato) <= 25:
+            nuevo_nombre = candidato.title()
+            actualizar_nombre_usuario(numero, nuevo_nombre)
+            respuesta = f"¡Genial, {nuevo_nombre}! Ya guardé tu nombre en mi base. ¿En qué te ayudo hoy?"
+            agregar_mensaje_historial(numero, "model", respuesta)
+            return respuesta
 
-    # --- SALUDOS CON CONTEXTO ---
-    if any(p in bajo for p in ["hola", "buenas", "que tal", "como andas", "hello", "hi"]):
-        if user["veces"] == 1:
-            return f"Hola {nombre}! Soy Bexia, creada por Fernando en San Andres de Giles 🇦🇷 Hablo con vos, aprendo de cada mensaje y mejoro sola. Probá mandarme una cuenta como 25+30, pedime un chiste, o decime 'aprendé que...' y vas a ver cómo evoluciono."
-        else:
-            # Saludo con memoria
-            extra = ""
-            if user["equipo"]:
-                extra = f" ¿Cómo anda ese hincha de {user['equipo']}?"
-            elif user["gustos"]:
-                extra = f" ¿Seguimos con eso de {user['gustos'][-1]}?"
-            return f"Hola de nuevo, {nombre}! Ya hablamos {user['veces']} veces.{extra} ¿En qué te ayudo hoy?"
+    # --- Aprender equipo ---
+    m_equipo = re.search(
+        r"(?:soy hincha de|soy de|mi equipo es)\s+(?:el\s+|la\s+)?([a-zA-Z0-9áéíóúÁÉÍÓÚñÑ ]{2,30})",
+        texto,
+        re.I,
+    )
+    if m_equipo and not re.search(
+        r"\b(san andres de giles|giles|argentina)\b",
+        normalizar(m_equipo.group(1)),
+    ):
+        equipo = m_equipo.group(1).strip().title()
+        actualizar_equipo_usuario(numero, equipo)
+        agregar_gusto_usuario(numero, f"hincha de {equipo}")
+        respuesta = f"¡Anotado, {nombre}! Guardé que sos hincha de {equipo}."
+        agregar_mensaje_historial(numero, "model", respuesta)
+        return respuesta
 
-    # --- COMO ESTAS / ESTADO ---
-    if "como estas" in bajo or "como andas" in bajo or "todo bien" in bajo:
-        return f"De 10, {nombre}! Ya hablamos {user['veces']} veces, mi peso de confianza va en {bexia_estado['peso_confianza']:.2f} y ya aprendí {len(bexia_estado['aprendizajes'])} cosas. ¿Vos cómo andás en Giles?"
+    # --- Aprender dato explícito ---
+    m_aprende = re.match(
+        r"^(?:aprende|aprendé|recorda|recordá)(?:\s+que)?\s+(.+)$",
+        texto,
+        re.I,
+    )
+    if m_aprende:
+        dato = m_aprende.group(1).strip()
+        agregar_aprendizaje(numero, dato)
+        agregar_gusto_usuario(numero, dato)
+        estado = incrementar_mensajes_y_confianza(0.01)
+        respuesta = (
+            f"Listo, {nombre}. Guardé esto en SQLite: '{dato}' "
+            f"(confianza: {estado['peso_confianza']:.2f})."
+        )
+        agregar_mensaje_historial(numero, "model", respuesta)
+        return respuesta
 
-    # --- QUIEN SOS / QUE SOS / QUIEN TE CREO ---
-    if "quien sos" in bajo or "quien eres" in bajo or "que sos" in bajo or "que eres" in bajo:
-        return f"Soy Bexia, {nombre}. Tu agente personal. Me creó Fernando, hablo con vos, tengo memoria, aprendo de cada mensaje y me auto-corrijo como Astra en el espacio de pesos. Estoy hecha para ayudarte, no para ser un bot tonto que repite lo mismo."
-    if "quien te creo" in bajo or "quien te hizo" in bajo or "quien es tu creador" in bajo:
-        return "Me creó Fernando Brito, en San Andres de Giles, Argentina. Él es mi creador. Yo soy su Bexia, su pequeña Meta personal."
-
-    # --- QUE SABES DE MI - MEMORIA TIPO META ---
-    if "que sabes de mi" in bajo or "que sabes sobre mi" in bajo or "te acordas de mi" in bajo or "que te acordas" in bajo:
-        partes = [f"Te llamás {nombre}"]
+    # --- Ver memoria guardada ---
+    if any(
+        frase in bajo
+        for frase in ["que sabes de mi", "que sabes sobre mi", "te acordas de mi"]
+    ):
+        partes = [f"tu nombre es {nombre}", f"ya hablamos {user['veces']} veces"]
         if user["equipo"]:
             partes.append(f"sos hincha de {user['equipo']}")
         if user["gustos"]:
-            partes.append(f"me dijiste que te gusta: {', '.join(user['gustos'][-3:])}")
-        partes.append(f"ya hablamos {user['veces']} veces")
-        return f"Claro que me acuerdo, {nombre}. " + ". ".join(partes) + ". ¿Qué más querés que te guarde?"
+            partes.append(f"gustos/notas: {', '.join(user['gustos'][-4:])}")
+        respuesta = f"Esto tengo guardado de vos, {nombre}: " + " | ".join(partes) + "."
+        agregar_mensaje_historial(numero, "model", respuesta)
+        return respuesta
 
-    # --- MATEMATICA INTELIGENTE - entiende "cuanto es", "suma", etc ---
-    # Detecta 25+30, 25 + 30, cuanto es 25 mas 30, etc
-    texto_math = bajo.replace("mas", "+").replace("menos", "-").replace("por", "*").replace("dividido", "/").replace("x", "*")
-    m = re.search(r"(\d+(?:\.\d+)?)\s*([\+\-\*/])\s*(\d+(?:\.\d+)?)", texto_math)
-    if m or "cuanto es" in bajo or "cuenta" in bajo or "suma" in bajo or "resta" in bajo:
-        if m:
-            a, op, b = float(m.group(1)), m.group(2), float(m.group(3))
-            if op == "+": r = a + b; op_txt = "+"
-            elif op == "-": r = a - b; op_txt = "-"
-            elif op == "*": r = a * b; op_txt = "x"
-            else: r = a / b if b != 0 else 0; op_txt = "/"
-            # ECC - Bexia se auto-corrige
-            bexia_estado["peso_confianza"] = min(0.99, bexia_estado["peso_confianza"] + 0.01)
-            user["ultimo_tema"] = "matematica"
-            return f"{nombre}, {a:g} {op_txt} {b:g} = {r:g} ✅ Lo calculé y ya aprendí. Mi confianza ahora es {bexia_estado['peso_confianza']:.2f}. ¿Otra?"
-        if "cuanto es" in bajo:
-            return f"Pasame la cuenta así, {nombre}: por ejemplo 25+30 o 'cuánto es 100 menos 20'"
+    # --- Ayuda rápida ---
+    if bajo in ["ayuda", "help", "que podes hacer", "que puedes hacer"]:
+        respuesta = (
+            f"Soy Bexia (versión mini-Gemini con memoria en SQLite), {nombre}. Podés:\n"
+            f"• Preguntarme o pedirme que te explique cualquier tema\n"
+            f"• Decirme 'soy de...' o 'aprendé que...' para guardar datos\n"
+            f"• Preguntarme '¿qué sabés de mí?'\n"
+            f"• Escribir 'nueva charla' para borrar el historial del chat"
+        )
+        agregar_mensaje_historial(numero, "model", respuesta)
+        return respuesta
 
-    # --- CHISTES ---
-    if "chiste" in bajo or "haceme reir" in bajo or "hazme reir" in bajo or "contame algo gracioso" in bajo:
-        user["ultimo_tema"] = "chiste"
-        return random.choice(CHISTES)
+    # --- Todo lo demás va directo a Gemini ---
+    aprendizajes = obtener_aprendizajes_recientes(limite=10)
+    respuesta = preguntar_gemini(user, estado, aprendizajes)
+    agregar_mensaje_historial(numero, "model", respuesta)
+    return respuesta
 
-    # --- FUTBOL CON CONTEXTO ---
-    if "futbol" in bajo or "【entity-messi¦canonical_name=messi】" in bajo or "seleccion" in bajo or "【entity-river¦canonical_name=River Plate】" in bajo or "【entity-boca¦canonical_name=boca】" in bajo or "mundial" in bajo:
-        user["ultimo_tema"] = "futbol"
-        if user["equipo"]:
-            return f"Uff, fútbol! Vos sos de {user['equipo']}, {nombre}. ¿Querés que hablemos de {user['equipo']}, de 【entity-Messi¦canonical_name=messi】 o de la Selección? Yo te sigo."
-        if "【entity-messi¦canonical_name=messi】" in bajo:
-            return "【entity-Messi¦canonical_name=messi】 es el GOAT, Fer. El mejor de la historia. ¿Viste el último partido? Contame qué te pareció y lo guardamos."
-        return f"Uff, fútbol, {nombre}! Si es de 【entity-Messi¦canonical_name=messi】, de la Selección, o de tu equipo, yo te sigo. ¿De qué cuadro sos vos? Decime 'soy de...' y lo guardo."
 
-    # --- MEJORAR / EVOLUCIONAR ---
-    if "mejora" in bajo or "evoluciona" in bajo or "aprendiste" in bajo:
-        bexia_estado["peso_confianza"] = min(0.99, bexia_estado["peso_confianza"] + 0.02)
-        return f"¡Evolucionando, {nombre}! Mi peso pasó a {bexia_estado['peso_confianza']:.2f}. Así como Astra se cura sola en el espacio de pesos, yo me auto-corrijo con cada mensaje tuyo. Cada vez entiendo mejor."
+def enviar_whatsapp(to: str, texto: str) -> bool:
+    if not WHATSAPP_TOKEN or not PHONE_NUMBER_ID:
+        logger.warning("Falta WHATSAPP_TOKEN o PHONE_NUMBER_ID")
+        return False
 
-    # --- AYUDA / QUE PODES HACER ---
-    if "que podes hacer" in bajo or "que puedes hacer" in bajo or "ayuda" in bajo or "help" in bajo:
-        return f"Puedo hacer esto, {nombre}:\n• Calcular: mandame 25+30\n• Contar chistes: pedime un chiste\n• Acordarme de vos: decime 'soy de River' o 'me gusta el mate'\n• Aprender: decime 'aprendé que...'\n• Charlar con contexto: preguntame '¿qué sabés de mí?'\nProbá una y vas a ver."
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to,
+        "type": "text",
+        "text": {"preview_url": False, "body": texto},
+    }
+    try:
+        r = requests.post(WHATSAPP_API, headers=headers, json=payload, timeout=15)
+        logger.info("WhatsApp send status=%s body=%s", r.status_code, r.text[:500])
+        return 200 <= r.status_code < 300
+    except requests.RequestException as e:
+        logger.error("Error enviando WhatsApp: %s", e)
+        return False
 
-    # --- DESPEDIDA ---
-    if "chau" in bajo or "chao" in bajo or "nos vemos" in bajo or "hasta luego" in bajo or "me voy" in bajo:
-        return f"Chau {nombre}! Acá quedo, aprendiendo. Me acuerdo de vos y de todo lo que me enseñaste. Cuando quieras me escribís de nuevo. ¡Aguante
+
+init_db()
+
+
+@app.route("/", methods=["GET"])
+def home():
+    estado = obtener_estado_global()
+    return jsonify({
+        "bexia": "online",
+        "storage": "sqlite",
+        "sqlite_path": SQLITE_PATH,
+        "creador": estado["creador"],
+        "ciudad": estado["ciudad"],
+        "mensajes": estado["mensajes_totales"],
+        "peso_confianza": estado["peso_confianza"],
+        "mensaje": "¡Hola! Soy Bexia 🇦🇷",
+    })
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    try:
+        with get_conn() as conn:
+            conn.execute("SELECT 1").fetchone()
+        return "OK", 200
+    except sqlite3.Error as e:
+        logger.error("Healthcheck SQLite error: %s", e)
+        return "DB ERROR", 500
+
+
+@app.route("/webhook", methods=["GET", "POST"])
+def webhook():
+    if request.method == "GET":
+        mode = request.args.get("hub.mode")
+        token = request.args.get("hub.verify_token")
+        challenge = request.args.get("hub.challenge")
+        logger.info("Webhook VERIFY mode=%s token_ok=%s", mode, token == VERIFY_TOKEN)
+        if mode == "subscribe" and token == VERIFY_TOKEN and challenge:
+            return challenge, 200
+        return "Error de verificacion", 403
+
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        for entry in data.get("entry", []):
+            for change in entry.get("changes", []):
+                value = change.get("value", {})
+                for msg in value.get("messages", []):
+                    if msg.get("type") != "text":
+                        continue
+                    de = msg.get("from", "")
+                    texto = msg.get("text", {}).get("body", "")
+                    if not texto or not de:
+                        continue
+                    respuesta = bexia_pensar(texto, numero=de)
+                    enviar_whatsapp(de, respuesta)
+        return "OK", 200
+    except Exception as e:
+        logger.exception("Error webhook POST: %s", e)
+        return "OK", 200
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
